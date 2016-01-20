@@ -56,7 +56,7 @@ def getPostData(folderPath):
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
 			postDataArray.append(row)
-	return postDataArray # array of http dpkt objects
+	return postDataArray # array of http request URIs
 
 def getDomains(folderPath): # returns array or domain names
 	folderNum = folderPath[len(folderPath)-2]
@@ -70,7 +70,7 @@ def getDomains(folderPath): # returns array or domain names
 			urlArray.append(row)
 	return urlArray # array of domain names
 
-def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN connection
+def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN connection and the ports
 	folderNum = folderPath[len(folderPath)-2]
 	print "getSYNInfo",folderNum
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0'")
@@ -80,8 +80,10 @@ def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN c
 	with open(folderPath+"/SYNConn-SUS"+folderNum+".csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
-			dstIPArray.append(row)
-	return list(removeDuplicates(dstIPArray))
+			if (tuple(row) not in dstIPArray):
+				dstIPArray.append(tuple(row))
+	#print dstIPArray
+	return dstIPArray
 
 def resolvedIPs(folderPath):
 	folderNum = folderPath[len(folderPath)-2]
@@ -118,20 +120,21 @@ def URIobj(httpR):
 	return indicator
 
 def TCPSYNobj(ips,ports):
+	print "heeererererere TCPSYNobj"
 	if len(ports) < 2:
 		t = NetworkConnection()
 		t.layer3_protocol = "IPv4"
 		t.layer4_protocol = "TCP"
 		ssocketaddress = SocketAddress()
 		sport = Port()
-		sport.port_value = ports[0] 
+		sport.port_value = ports[0][0] 
 		sport.layer4_protocol = "TCP"
 		ssocketaddress.port = sport
 		t.source_socket_address = ssocketaddress		
 		dsocketaddress = SocketAddress()
 		dsocketaddress.ip_address = ips
 		dport = Port()
-		dport.port_value = ports[1]
+		dport.port_value = ports[0][1]
 		dport.layer4_protocol = "TCP"
 		dsocketaddress.port = dport
 		t.destination_socket_address = dsocketaddress
@@ -142,6 +145,7 @@ def TCPSYNobj(ips,ports):
 		indicator.add_object(t)
 		return indicator
 	else:
+		print "no here"
 		for i in ports:
 			t = NetworkConnection()
 			t.layer3_protocol = "IPv4"
@@ -201,15 +205,14 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs):
 			if info[3] not in tcpSYNports[info[1]]:
 				tcpSYNports[info[1]].append((info[2],info[3]))
 	tcpSYNips = removeDuplicates(tcpSYNips)
-	for z in tcpSYNips:
+	for z in tcpSYNips:		
 		stix_package.add(TCPSYNobj(z,tcpSYNports[z]))
-	for x in postDataArray:
-		uris.append(x.uri)
-	xx = removeDuplicates(uris)		
-	for i in xx:
-		stix_package.add(URIobj(i))
-	for dd in removeDuplicates(getDomains):
-		stix_package.add(domainNameobj(dd))
+	print postDataArray
+	#xx = removeDuplicates(postDataArray)		
+	#for i in xx:
+	#	stix_package.add(URIobj(i))
+	#for dd in removeDuplicates(getDomains):
+	#	stix_package.add(domainNameobj(dd))
 				
 	IOCStix = open(folderPath+"/IOCStix.xml",'w')
 	IOCStix.write(stix_package.to_xml())
