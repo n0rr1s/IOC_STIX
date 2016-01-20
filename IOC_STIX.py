@@ -55,24 +55,27 @@ def getPostData(folderPath):
 	with open(folderPath+"/HTTPPOST-SUS"+folderNum+".csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
-			postDataArray.append(row)
+			if row != []:
+				#print "getPostData", row, type(row)
+				postDataArray.append(row[0])
 	return postDataArray # array of http request URIs
 
 def getDomains(folderPath): # returns array or domain names
 	folderNum = folderPath[len(folderPath)-2]
-	print "get domains",folderNum
+	#print "get domains",folderNum
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS"+folderNum+".csv")
 	urlArray = []
 	# ...
 	with open(folderPath+"/domains-SUS"+folderNum+".csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
-			urlArray.append(row)
+			if row != []:
+				urlArray.append(row[0])
 	return urlArray # array of domain names
 
 def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN connection and the ports
 	folderNum = folderPath[len(folderPath)-2]
-	print "getSYNInfo",folderNum
+	#print "getSYNInfo",folderNum
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0'")
 	os.system("tshark -r "+folderPath+"/TCPSYN.pcap -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS"+folderNum+".csv")
 	dstIPArray = []
@@ -87,15 +90,18 @@ def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN c
 
 def resolvedIPs(folderPath):
 	folderNum = folderPath[len(folderPath)-2]
-	print "resolvedIPs", folderNum
+	#print "resolvedIPs", folderNum
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS"+folderNum+".csv")
 	susResolvedIPArray = []
 	# ...
 	with open(folderPath+"/domains-SUS"+folderNum+".csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
-			susResolvedIPArray.append(row)
-	return susResolvedIPArray
+			if row != []:
+				for i in row:				
+					print type(i), i
+					susResolvedIPArray.append(i)
+	return removeDuplicates(susResolvedIPArray)
 
 def domainNameobj(domain):
 	# cybox stuff
@@ -120,7 +126,7 @@ def URIobj(httpR):
 	return indicator
 
 def TCPSYNobj(ips,ports):
-	print "heeererererere TCPSYNobj"
+	#print "heeererererere TCPSYNobj"
 	if len(ports) < 2:
 		t = NetworkConnection()
 		t.layer3_protocol = "IPv4"
@@ -145,7 +151,7 @@ def TCPSYNobj(ips,ports):
 		indicator.add_object(t)
 		return indicator
 	else:
-		print "no here"
+		#print "no here"
 		for i in ports:
 			t = NetworkConnection()
 			t.layer3_protocol = "IPv4"
@@ -207,15 +213,15 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs):
 	tcpSYNips = removeDuplicates(tcpSYNips)
 	for z in tcpSYNips:		
 		stix_package.add(TCPSYNobj(z,tcpSYNports[z]))
-	print postDataArray
-	#xx = removeDuplicates(postDataArray)		
-	#for i in xx:
-	#	stix_package.add(URIobj(i))
-	#for dd in removeDuplicates(getDomains):
-	#	stix_package.add(domainNameobj(dd))
+	#print postDataArray
+	xx = removeDuplicates(postDataArray)		
+	for i in xx:
+		stix_package.add(URIobj(i))
+	for dd in removeDuplicates(getDomains):
+		stix_package.add(domainNameobj(dd))
 				
 	IOCStix = open(folderPath+"/IOCStix.xml",'w')
 	IOCStix.write(stix_package.to_xml())
 	IOCStix.close()	
-	print(stix_package.to_xml())	
+	#print(stix_package.to_xml())	
 
