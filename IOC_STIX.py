@@ -60,7 +60,7 @@ def getPostData(folderPath):
 
 def getDomains(folderPath): # returns array or domain names
 	folderNum = folderPath[len(folderPath)-2]
-	print folderNum
+	print "get domains",folderNum
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS"+folderNum+".csv")
 	urlArray = []
 	# ...
@@ -72,7 +72,7 @@ def getDomains(folderPath): # returns array or domain names
 
 def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN connection
 	folderNum = folderPath[len(folderPath)-2]
-	print folderNum
+	print "getSYNInfo",folderNum
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0'")
 	os.system("tshark -r "+folderPath+"/TCPSYN.pcap -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS"+folderNum+".csv")
 	dstIPArray = []
@@ -81,11 +81,11 @@ def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN c
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
 			dstIPArray.append(row)
-	return list(set(dstIPArray))
+	return list(removeDuplicates(dstIPArray))
 
 def resolvedIPs(folderPath):
 	folderNum = folderPath[len(folderPath)-2]
-	print folderNum
+	print "resolvedIPs", folderNum
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS"+folderNum+".csv")
 	susResolvedIPArray = []
 	# ...
@@ -177,6 +177,11 @@ def susIP(ip):
 	indicator.set_produced_time(utils.dates.now())
 	indicator.add_object(a)
 	return indicator
+
+def removeDuplicates(seq):
+	seen = set()
+    	seen_add = seen.add
+    	return [ x for x in seq if not (x in seen or seen_add(x))]
 
 def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs):
 	stix_package = STIXPackage()
