@@ -47,12 +47,11 @@ class IOC_STIX(Report):
             		raise CuckooReportError("Failed to make STIX IOCs :(")
 
 def getPostData(folderPath):
-	folderNum = folderPath[len(folderPath)-2]
-	print folderNum	
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e http.request.full_uri -E separator=, > "+folderPath+"/HTTPPOST-SUS"+folderNum+".csv")
+	#folderNum = folderPath[len(folderPath)-2] 	
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e http.request.full_uri -E separator=, > "+folderPath+"/HTTPPOST-SUS.csv")
 	postDataArray = []
 	# ...
-	with open(folderPath+"/HTTPPOST-SUS"+folderNum+".csv", 'rb') as csvfile:
+	with open(folderPath+"/HTTPPOST-SUS.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
 			if row != []:
@@ -61,12 +60,12 @@ def getPostData(folderPath):
 	return postDataArray # array of http request URIs
 
 def getDomains(folderPath): # returns array or domain names
-	folderNum = folderPath[len(folderPath)-2]
+	#folderNum = folderPath[len(folderPath)-2]
 	#print "get domains",folderNum
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS"+folderNum+".csv")
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS.csv")
 	urlArray = []
 	# ...
-	with open(folderPath+"/domains-SUS"+folderNum+".csv", 'rb') as csvfile:
+	with open(folderPath+"/domains-SUS.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
 			if row != []:
@@ -74,13 +73,13 @@ def getDomains(folderPath): # returns array or domain names
 	return urlArray # array of domain names
 
 def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN connection and the ports
-	folderNum = folderPath[len(folderPath)-2]
+	#folderNum = folderPath[len(folderPath)-2]
 	#print "getSYNInfo",folderNum
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0'")
-	os.system("tshark -r "+folderPath+"/TCPSYN.pcap -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS"+folderNum+".csv")
+	os.system("tshark -r "+folderPath+"/TCPSYN.pcap -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS.csv")
 	dstIPArray = []
 	# ...
-	with open(folderPath+"/SYNConn-SUS"+folderNum+".csv", 'rb') as csvfile:
+	with open(folderPath+"/SYNConn-SUS.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
 			if (tuple(row) not in dstIPArray):
@@ -89,12 +88,12 @@ def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN c
 	return dstIPArray
 
 def resolvedIPs(folderPath):
-	folderNum = folderPath[len(folderPath)-2]
+	#folderNum = folderPath[len(folderPath)-2]
 	#print "resolvedIPs", folderNum
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS"+folderNum+".csv")
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS.csv")
 	susResolvedIPArray = []
 	# ...
-	with open(folderPath+"/domains-SUS"+folderNum+".csv", 'rb') as csvfile:
+	with open(folderPath+"/domains-SUS.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
 			if row != []:
