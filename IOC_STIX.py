@@ -37,7 +37,7 @@ class IOC_STIX(Report):
 			getDomainsArray = getDomains(self.analysis_path)
 			synConn = getSYNInfo(self.analysis_path)
 			resolvedIPsArray = resolvedIPs(self.analysis_path)
-			if postDataArray != [] and getDomainsArray != [] and synConn != []:
+			if postDataArray != []  or getDomainsArray != [] or synConn != []:
 				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray)
 			else:
 				print "No IOCs to create"
