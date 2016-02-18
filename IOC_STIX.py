@@ -52,7 +52,8 @@ class IOC_STIX(Report):
 
 def getPostData(folderPath):
 	#folderNum = folderPath[len(folderPath)-2] 	
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e http.request.full_uri -E separator=, > "+folderPath+"/HTTPPOST-SUS.csv")
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e http.request.uri -E separator=, > "+folderPath+"/HTTPPOST-SUS.csv")
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e http.request.full_uri -E separator=, > "+folderPath+"/HTTPPOST-SUS-FULLURI.csv")
 	postDataArray = []
 	# ...
 	with open(folderPath+"/HTTPPOST-SUS.csv", 'rb') as csvfile:
