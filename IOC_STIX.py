@@ -11,6 +11,11 @@ from stix.report import Header #Report maybe this fails?
 from stix.report import Report as stixReport
 from stix.common import InformationSource
 
+# TODO http://stixproject.github.io/documentation/idioms/snort-test-mechanism/
+# The test_mechanism is part of the indicator
+
+# TODO add UPD, add record type of DNS query, add whole http request
+
 # python-cybox
 # DNS
 from cybox.core import *
@@ -31,7 +36,8 @@ from cybox.objects.port_object import Port
 from cybox.objects.address_object import Address
 
 class IOC_STIX(Report):
-	def run(self, results):		
+	def run(self, results):	
+		print str(results)	
 		try:
 			print "Start of IOC_STIX new one"
            		#Do things
@@ -40,15 +46,66 @@ class IOC_STIX(Report):
 			getDomainsArray = getDomains(self.analysis_path)
 			synConn = getSYNInfo(self.analysis_path)
 			resolvedIPsArray = resolvedIPs(self.analysis_path)
+			fullHTTPArray = getFullHTTP(self.analysis_path)
 			if postDataArray != []  or getDomainsArray != [] or synConn != []:
-				print "gatherIOCs soon !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray)
+				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray, results, fullHTTPArray)
 			else:
 				print "No IOCs to create"
 			
         	except (UnicodeError, TypeError, IOError) as e:
 			print "Error", e
             		raise CuckooReportError("Failed to make STIX IOCs :(")
+
+def getUDPData(folderPath):
+	pass
+
+def getFullHTTP(folderPath):
+	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -Y http.request.method=="GET" -T fields -e http.request.method \
+										-e http.request.uri \
+										-e http.request.version	\
+										-e http.host \
+										-e tcp.dstport \
+										-e http.accept \
+										-e http.accept_language	\
+										-e http.accept_encoding \
+										-e http.authorization \
+										-e http.cache_control \
+										-e http.connection \
+										-e http.cookie \
+										-e http.content_length \
+										-e http.content_type \
+										-e http.date \
+										-e http.host \
+										-e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullGET.csv')
+	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -Y http.request.method=="POST" -T fields -e http.request.method \
+										-e http.request.uri \
+										-e http.request.version	\
+										-e http.host \
+										-e tcp.dstport \
+										-e http.accept \
+										-e http.accept_language	\
+										-e http.accept_encoding \
+										-e http.authorization \
+										-e http.cache_control \
+										-e http.connection \
+										-e http.cookie \
+										-e http.content_length \
+										-e http.content_type \
+										-e http.date \
+										-e http.host \
+										-e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullPOST.csv')
+	HTTPfull = []
+	with open(folderPath+"/HTTPFullGET.csv", 'rb') as csvfile:
+		summaryCSV = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSV:
+			if row != []:
+				HTTPfull.append(row)
+	with open(folderPath+"/HTTPFullPOST.csv", 'rb') as csvfile:
+		summaryCSV = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSV:
+			if row != []:
+				HTTPfull.append(row)
+	return HTTPfull
 
 def getPostData(folderPath):
 	#folderNum = folderPath[len(folderPath)-2] 	
@@ -60,13 +117,13 @@ def getPostData(folderPath):
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
 			if row != []:
-				print "getPostData", row, type(row)
+				#print "getPostData", row, type(row)
 				postDataArray.append(row[0])
 	return postDataArray # array of http request URIs
 
 def getDomains(folderPath): # returns array or domain names
 	#folderNum = folderPath[len(folderPath)-2]
-	print "get domains",folderPath
+	#print "get domains",folderPath
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS.csv")
 	urlArray = []
 	# ...
@@ -79,7 +136,7 @@ def getDomains(folderPath): # returns array or domain names
 
 def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN connection and the ports
 	#folderNum = folderPath[len(folderPath)-2]
-	print "getSYNInfo",folderPath
+	#print "getSYNInfo",folderPath
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0'")
 	os.system("tshark -r "+folderPath+"/TCPSYN.pcap -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS.csv")
 	dstIPArray = []
@@ -94,7 +151,7 @@ def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN c
 
 def resolvedIPs(folderPath):
 	#folderNum = folderPath[len(folderPath)-2]
-	print "resolvedIPs", folderPath
+	#print "resolvedIPs", folderPath
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS.csv")
 	susResolvedIPArray = []
 	# ...
@@ -103,7 +160,7 @@ def resolvedIPs(folderPath):
 		for row in summaryCSV:
 			if row != []:
 				for i in row:				
-					print type(i), i
+					#print type(i), i
 					susResolvedIPArray.append(i)
 	return removeDuplicates(susResolvedIPArray)
 
@@ -128,6 +185,76 @@ def URIobj(httpR):
 	indicator.set_produced_time(utils.dates.now())
 	indicator.add_object(h)
 	return indicator
+
+def HTTPFullObj(http): 
+	print "HTTP full object"
+	# HTTP Request Line
+	httprequestline = HTTPRequestLine()
+	httprequestline.http_method = http[0]
+	httprequestline.value = http[1]
+	httprequestline.version = http[2]
+	print "Host field"
+	# Host Field
+	hostfield = HostField()
+	h = URI()
+	h.value = str(http[3]) 
+	hostfield.domain_name = h
+	port = Port()
+	port.port_value = http[4]
+	hostfield.port = port
+	print "http request"
+	# HTTP Request Header Fields
+	httprequestheaderfields = HTTPRequestHeaderFields()
+	if http[5] != '':										
+		httprequestheaderfields.accept = http[5]
+	if http[6] != '':									
+		httprequestheaderfields.accept_language = http[6]
+	if http[7] != '':										
+		httprequestheaderfields.accept_encoding = http[7]
+	if http[8] != '':										
+		httprequestheaderfields.authorization = http[8]
+	if http[9] != '':										
+		httprequestheaderfields.cache_control = http[9]
+	if http[10] != '':									
+		httprequestheaderfields.connection = http[10]
+	if http[11] != '':										
+		httprequestheaderfields.cookie = http[11]
+	if http[12] != '':										
+		httprequestheaderfields.content_length = http[12] # integer
+	if http[13] != '':										
+		httprequestheaderfields.content_type = http[13]	
+	if http[14] != '':										
+		httprequestheaderfields.date = http[14] # datetime
+	if http[15] != '':						
+		httprequestheaderfields.host = hostfield
+	if http[16] != '':										
+		httprequestheaderfields.proxy_authorization = http[16]				
+	print "httprequestheader"
+	httprequestheader = HTTPRequestHeader()
+	httprequestheader.parsed_header = httprequestheaderfields
+
+	#httpmessage = HTTPMessage()
+	#httpmessage.length = len(http.body)
+	#httpmessage.message_body = http.body
+	print "httpclientrequest"
+	httpclientrequest = HTTPClientRequest()
+	httpclientrequest.http_request_line = httprequestline
+	httpclientrequest.http_request_header = httprequestheader
+	#httpclientrequest.http_message_body = httpmessage
+	
+	http_request_response = HTTPRequestResponse()
+	http_request_response.http_client_request = httpclientrequest
+	
+	httpsession = HTTPSession()	
+	httpsession.http_request_response = http_request_response	
+
+	indicator = Indicator()
+    	indicator.title = "HTTP request"
+    	indicator.description = ("An indicator containing information about a HTTP request")
+	indicator.set_produced_time(utils.dates.now())
+	indicator.add_object(httpsession)
+	return indicator
+
 
 def TCPSYNobj(ips,ports):
 	#print "heeererererere TCPSYNobj"
@@ -197,7 +324,7 @@ def removeDuplicates(seq):
     	seen_add = seen.add
     	return [ x for x in seq if not (x in seen or seen_add(x))]
 
-def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs):
+def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, results, fullHTTPArray):
 	print "Gather IPs"
 	stix_package = STIXPackage()
 	stix_report = stixReport() 	# need to add indicator references to this
@@ -225,7 +352,7 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs):
 	for z in tcpSYNips:		
 		stix_package.add(TCPSYNobj(z,tcpSYNports[z]))
 		stix_report.add_indicator(Indicator(idref=TCPSYNobj(z,tcpSYNports[z])._id))
-	#print postDataArray
+	
 	xx = removeDuplicates(postDataArray)		
 	for i in xx:
 		stix_package.add(URIobj(i))
@@ -233,8 +360,14 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs):
 	for dd in removeDuplicates(getDomains):
 		stix_package.add(domainNameobj(dd))
 		stix_report.add_indicator(Indicator(idref=domainNameobj(dd)._id))
+
+	# Full HTTP Request
+	for ht in fullHTTPArray:
+		print "ht ", ht
+		stix_package.add(HTTPFullObj(ht))
+		stix_report.add_indicator(Indicator(idref=HTTPFullObj(ht)._id))
 	stix_package.add_report(stix_report)		
-	IOCStix = open(folderPath+"/IOCStix.xml",'w')
+	IOCStix = open(folderPath+"/"+str(results["virustotal"]["md5"])+".xml",'w')
 	IOCStix.write(stix_package.to_xml())
 	IOCStix.close()	
 	#print(stix_package.to_xml())	
