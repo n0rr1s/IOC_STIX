@@ -35,6 +35,8 @@ from cybox.objects.port_object import Port
 # IP Address etc
 from cybox.objects.address_object import Address
 
+VMIP = "146.231.133.174"
+
 class IOC_STIX(Report):
 	def run(self, results):	
 		print str(results)	
@@ -47,8 +49,9 @@ class IOC_STIX(Report):
 			synConn = getSYNInfo(self.analysis_path)
 			resolvedIPsArray = resolvedIPs(self.analysis_path)
 			fullHTTPArray = getFullHTTP(self.analysis_path)
+			udpconn = getUDPData(self.analysis_path)
 			if postDataArray != []  or getDomainsArray != [] or synConn != []:
-				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray, results, fullHTTPArray)
+				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray, results, fullHTTPArray, udpconn)
 			else:
 				print "No IOCs to create"
 			
@@ -56,8 +59,19 @@ class IOC_STIX(Report):
 			print "Error", e
             		raise CuckooReportError("Failed to make STIX IOCs :(")
 
+# source port, destination port, destination ip
+# https://www.wireshark.org/docs/dfref/u/udp.html
 def getUDPData(folderPath):
-	pass
+	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/UDPpackets.pcap -F pcap -Y udp -T fields -e udp.srcport -e udp.dstport -e ip.dst -e ip.src -E separator=, > '+folderPath+'/UDPInfo.csv')
+	udppacket = []
+	with open(folderPath+"/UDPInfo.csv", 'rb') as csvfile:
+		summaryCSV = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSV:
+			if row != [] and row not in udppacket:
+				udppacket.append(row)
+	print udppacket
+	return udppacket
+
 
 def getFullHTTP(folderPath):
 	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -Y http.request.method=="GET" -T fields -e http.request.method \
@@ -124,7 +138,7 @@ def getPostData(folderPath):
 def getDomains(folderPath): # returns array or domain names
 	#folderNum = folderPath[len(folderPath)-2]
 	#print "get domains",folderPath
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS.csv")
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y dns -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS.csv")
 	urlArray = []
 	# ...
 	with open(folderPath+"/domains-SUS.csv", 'rb') as csvfile:
@@ -137,8 +151,8 @@ def getDomains(folderPath): # returns array or domain names
 def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN connection and the ports
 	#folderNum = folderPath[len(folderPath)-2]
 	#print "getSYNInfo",folderPath
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0'")
-	os.system("tshark -r "+folderPath+"/TCPSYN.pcap -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS.csv")
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0' -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS.csv")
+	#os.system("tshark -r "+folderPath+"/TCPSYN.pcap -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS.csv")
 	dstIPArray = []
 	# ...
 	with open(folderPath+"/SYNConn-SUS.csv", 'rb') as csvfile:
@@ -187,13 +201,13 @@ def URIobj(httpR):
 	return indicator
 
 def HTTPFullObj(http): 
-	print "HTTP full object"
+	#print "HTTP full object"
 	# HTTP Request Line
 	httprequestline = HTTPRequestLine()
 	httprequestline.http_method = http[0]
 	httprequestline.value = http[1]
 	httprequestline.version = http[2]
-	print "Host field"
+	#print "Host field"
 	# Host Field
 	hostfield = HostField()
 	h = URI()
@@ -202,7 +216,7 @@ def HTTPFullObj(http):
 	port = Port()
 	port.port_value = http[4]
 	hostfield.port = port
-	print "http request"
+	#print "http request"
 	# HTTP Request Header Fields
 	httprequestheaderfields = HTTPRequestHeaderFields()
 	if http[5] != '':										
@@ -229,14 +243,14 @@ def HTTPFullObj(http):
 		httprequestheaderfields.host = hostfield
 	if http[16] != '':										
 		httprequestheaderfields.proxy_authorization = http[16]				
-	print "httprequestheader"
+	#print "httprequestheader"
 	httprequestheader = HTTPRequestHeader()
 	httprequestheader.parsed_header = httprequestheaderfields
 
 	#httpmessage = HTTPMessage()
 	#httpmessage.length = len(http.body)
 	#httpmessage.message_body = http.body
-	print "httpclientrequest"
+	#print "httpclientrequest"
 	httpclientrequest = HTTPClientRequest()
 	httpclientrequest.http_request_line = httprequestline
 	httpclientrequest.http_request_header = httprequestheader
@@ -307,6 +321,36 @@ def TCPSYNobj(ips,ports):
 			indicator.add_object(t)
 			return indicator
 
+# source port, destination port, destination ip, source ip
+def UDPRequestObj(udpinfo):
+	print "In UDP Object"
+	u = NetworkConnection()
+	u.layer3_protocol = "IPv4"
+	u.layer4_protocol = "UDP"
+	ssocketaddress = SocketAddress()
+	if udpinfo[3] != VMIP:
+		ssocketaddress.ip_address = udpinfo[3]
+	sport = Port()
+	sport.port_value = udpinfo[0]
+	sport.layer4_protocol = "UDP"
+	ssocketaddress.port = sport
+	u.source_socket_address = ssocketaddress		
+	dsocketaddress = SocketAddress()
+	if udpinfo[2] != VMIP:
+		dsocketaddress.ip_address = udpinfo[2]
+	dport = Port()
+	dport.port_value = udpinfo[1]
+	dport.layer4_protocol = "UDP"
+	dsocketaddress.port = dport
+	u.destination_socket_address = dsocketaddress
+	indicator = Indicator()
+    	indicator.title = "UDP connection"
+    	indicator.description = ("An indicator containing information about a UDP connection")
+	indicator.set_produced_time(utils.dates.now())
+	indicator.add_object(u)
+	return indicator
+	
+
 def susIP(ip):
 	#TODO (from dns response) 
 	a = Address()
@@ -324,7 +368,7 @@ def removeDuplicates(seq):
     	seen_add = seen.add
     	return [ x for x in seq if not (x in seen or seen_add(x))]
 
-def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, results, fullHTTPArray):
+def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, results, fullHTTPArray, udpconn):
 	print "Gather IPs"
 	stix_package = STIXPackage()
 	stix_report = stixReport() 	# need to add indicator references to this
@@ -338,9 +382,13 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, resu
 	uris = []
 	tcpSYNips = []
 	tcpSYNports = {}
+
+# IP address
 	for susip in resolvedIPs:
 		stix_package.add(susIP(susip))
 		stix_report.add_indicator(Indicator(idref=susIP(susip)._id))
+	
+#TCP SYN
 	for info in synConn:
 		tcpSYNips.append(info[1])
 		if info[1] not in tcpSYNports.keys():
@@ -353,19 +401,26 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, resu
 		stix_package.add(TCPSYNobj(z,tcpSYNports[z]))
 		stix_report.add_indicator(Indicator(idref=TCPSYNobj(z,tcpSYNports[z])._id))
 	
-	xx = removeDuplicates(postDataArray)		
-	for i in xx:
+# URI			
+	for i in removeDuplicates(postDataArray):
 		stix_package.add(URIobj(i))
 		stix_report.add_indicator(Indicator(idref=URIobj(i)._id))
 	for dd in removeDuplicates(getDomains):
 		stix_package.add(domainNameobj(dd))
 		stix_report.add_indicator(Indicator(idref=domainNameobj(dd)._id))
 
-	# Full HTTP Request
+# Full HTTP Request
 	for ht in fullHTTPArray:
 		print "ht ", ht
 		stix_package.add(HTTPFullObj(ht))
 		stix_report.add_indicator(Indicator(idref=HTTPFullObj(ht)._id))
+
+# UDP Connection
+	for udp in udpconn:
+		print udp		
+		stix_package.add(UDPRequestObj(udp))
+		stix_report.add_indicator(Indicator(idref=UDPRequestObj(udp)._id))
+
 	stix_package.add_report(stix_report)		
 	IOCStix = open(folderPath+"/"+str(results["virustotal"]["md5"])+".xml",'w')
 	IOCStix.write(stix_package.to_xml())
