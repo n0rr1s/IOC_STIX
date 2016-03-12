@@ -39,7 +39,7 @@ VMIP = "146.231.133.174"
 
 class IOC_STIX(Report):
 	def run(self, results):	
-		print str(results)	
+		#print str(results)	
 		try:
 			print "Start of IOC_STIX new one"
            		#Do things
@@ -50,8 +50,9 @@ class IOC_STIX(Report):
 			resolvedIPsArray = resolvedIPs(self.analysis_path)
 			fullHTTPArray = getFullHTTP(self.analysis_path)
 			udpconn = getUDPData(self.analysis_path)
+			dnspacket = getDNSData(self.analysis_path)
 			if postDataArray != []  or getDomainsArray != [] or synConn != []:
-				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray, results, fullHTTPArray, udpconn)
+				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket)
 			else:
 				print "No IOCs to create"
 			
@@ -65,49 +66,32 @@ def getUDPData(folderPath):
 	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/UDPpackets.pcap -F pcap -Y udp -T fields -e udp.srcport -e udp.dstport -e ip.dst -e ip.src -E separator=, > '+folderPath+'/UDPInfo.csv')
 	udppacket = []
 	with open(folderPath+"/UDPInfo.csv", 'rb') as csvfile:
-		summaryCSV = csv.reader(csvfile, delimiter=',')
-		for row in summaryCSV:
+		summaryCSVUDP = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSVUDP:
 			if row != [] and row not in udppacket:
 				udppacket.append(row)
-	print udppacket
+	print "udp packet: ", udppacket
 	return udppacket
+
+def getDNSData(folderPath):
+	os.system('tshark -r'+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/DNSpackets.pcap -F pcap -Y dns -T fields -e ip.src -e udp.srcport -e ip.dst -e udp.dstport -e dns.qry.name -e dns.resp.name -e dns.resp.ttl -e dns.resp.type -e dns.a -e dns.flags.response -E separator=, > '+folderPath+'/DNSInfo.csv')
+	dnspacket = []
+	with open(folderPath+"/DNSInfo.csv", 'rb') as csvfile:
+		summaryCSVDNS = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSVDNS:
+			if row != [] and row not in dnspacket:
+				udppacket.append(row)
+	print "dns packet: ", dnspacket
+	return dnspacket
 
 
 def getFullHTTP(folderPath):
-	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -Y http.request.method=="GET" -T fields -e http.request.method \
-										-e http.request.uri \
-										-e http.request.version	\
-										-e http.host \
-										-e tcp.dstport \
-										-e http.accept \
-										-e http.accept_language	\
-										-e http.accept_encoding \
-										-e http.authorization \
-										-e http.cache_control \
-										-e http.connection \
-										-e http.cookie \
-										-e http.content_length \
-										-e http.content_type \
-										-e http.date \
-										-e http.host \
-										-e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullGET.csv')
-	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -Y http.request.method=="POST" -T fields -e http.request.method \
-										-e http.request.uri \
-										-e http.request.version	\
-										-e http.host \
-										-e tcp.dstport \
-										-e http.accept \
-										-e http.accept_language	\
-										-e http.accept_encoding \
-										-e http.authorization \
-										-e http.cache_control \
-										-e http.connection \
-										-e http.cookie \
-										-e http.content_length \
-										-e http.content_type \
-										-e http.date \
-										-e http.host \
-										-e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullPOST.csv')
+	comm = 'tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/HTTPGETpackets.pcap -F pcap -Y http.request.method=="GET" -T fields -e http.request.method -e http.request.uri -e http.request.version -e http.host -e tcp.dstport -e http.accept -e http.accept_language -e http.accept_encoding -e http.authorization -e http.cache_control -e http.connection -e http.cookie -e http.content_length -e http.content_type -e http.date -e http.host -e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullGET.csv'
+	print "Http comm: ", comm
+	os.system(comm)
+	comm2 = 'tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/HTTPPOSTpackets.pcap -F pcap -Y http.request.method=="POST" -T fields -e http.request.method -e http.request.uri -e http.request.version -e http.host -e tcp.dstport -e http.accept -e http.accept_language -e http.accept_encoding -e http.authorization -e http.cache_control -e http.connection -e http.cookie -e http.content_length -e http.content_type -e http.date -e http.host -e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullPOST.csv'
+	print "Http comm: ", comm2	
+	os.system(comm2)
 	HTTPfull = []
 	with open(folderPath+"/HTTPFullGET.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
@@ -201,7 +185,7 @@ def URIobj(httpR):
 	return indicator
 
 def HTTPFullObj(http): 
-	#print "HTTP full object"
+	print "HTTP full object", http
 	# HTTP Request Line
 	httprequestline = HTTPRequestLine()
 	httprequestline.http_method = http[0]
@@ -349,7 +333,57 @@ def UDPRequestObj(udpinfo):
 	indicator.set_produced_time(utils.dates.now())
 	indicator.add_object(u)
 	return indicator
-	
+
+# -e ip.srource -e udp.source port -e ip.destination -e udp.destination -e dns.qry.name -e dns.resp.name -e dns.resp.ttl -e dns.resp.type -e dns.resp.addr	
+def DNSRequestObj(dnsinfo):  
+	networkconnection = NetworkConnection()
+	networkconnection.creation_time = datetime.datetime.fromtimestamp(int(ts))
+	networkconnection.layer3_protocol = "IPv4"
+	networkconnection.layer4_protocol = "UDP"
+	networkconnection.layer7_protocol = "DNS"
+	ssocketaddress = SocketAddress()
+	ssocketaddress.ip_address = dnsinfo[0]
+	sport = Port()
+	sport.port_value = dnsinfo[1]
+	sport.layer4_protocol = "UDP"
+	ssocketaddress.port = sport
+	networkconnection.source_socket_address = ssocketaddress
+	dsocketaddress = SocketAddress()
+	dsocketaddress.ip_address = dnsinfo[2]
+	dport = Port()
+	dport.port_value = dnsinfo[3]
+	dport.layer4_protocol = "UDP"
+	dsocketaddress.port = dport
+	networkconnection.destination_socket_address = dsocketaddress
+	layer7connections = Layer7Connections()
+	dqr = DNSQuery()
+	if dnsinfo[9] == 0:
+		dnsques = DNSQuestion()
+		dnsques.qname = dnsinfo[4]
+		dqr.question = dnsques
+	else: # is a response
+		dqr = DNSQuery()					
+		dnsrecord = DNSRecord()
+		try:
+			dnsrecord.domain_name = dnsinfo[5]
+		except:
+			pass
+		try:
+			dnsrecord.ttl = dnsinfo[6]
+		except:
+			pass
+		try:
+			dnsrecord.record_type = dnsinfo[7]
+		except:
+			pass
+		dnsrecord.ip_address = dnsinfo[8]
+		dqr.answer_resource_records = DNSResourceRecords(dnsrecord)
+		#dqr.authority_resource_records = 
+		#dqr.additional_records = 	
+	layer7connections.dns_query = dqr
+	networkconnection.layer7_connections = layer7connections
+	return networkconnection
+
 
 def susIP(ip):
 	#TODO (from dns response) 
@@ -368,7 +402,7 @@ def removeDuplicates(seq):
     	seen_add = seen.add
     	return [ x for x in seq if not (x in seen or seen_add(x))]
 
-def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, results, fullHTTPArray, udpconn):
+def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket):
 	print "Gather IPs"
 	stix_package = STIXPackage()
 	stix_report = stixReport() 	# need to add indicator references to this
@@ -417,9 +451,15 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, resu
 
 # UDP Connection
 	for udp in udpconn:
-		print udp		
+		print "udp: ", udp		
 		stix_package.add(UDPRequestObj(udp))
 		stix_report.add_indicator(Indicator(idref=UDPRequestObj(udp)._id))
+
+# DNS Connection
+	for dns in dnspacket:
+		print "dns: ", dns		
+		stix_package.add(DNSRequestObj(dns))
+		stix_report.add_indicator(Indicator(idref=DNSRequestObj(dns)._id))
 
 	stix_package.add_report(stix_report)		
 	IOCStix = open(folderPath+"/"+str(results["virustotal"]["md5"])+".xml",'w')
