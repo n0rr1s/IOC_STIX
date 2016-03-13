@@ -7,7 +7,7 @@ from lib.cuckoo.common.exceptions import CuckooReportError
 import stix.utils as utils
 from stix.core import STIXPackage, STIXHeader 
 from stix.indicator import Indicator
-from stix.report import Header #Report maybe this fails?
+from stix.report import Header
 from stix.report import Report as stixReport
 from stix.common import InformationSource
 
@@ -17,6 +17,8 @@ from stix.common import InformationSource
 # TODO add UPD, add record type of DNS query, add whole http request
 
 # python-cybox
+# http://cyboxproject.github.io/documentation/objects/
+
 # DNS
 from cybox.core import *
 from cybox.objects.dns_query_object import DNSQuery, DNSQuestion, DNSResourceRecords
@@ -35,6 +37,7 @@ from cybox.objects.port_object import Port
 # IP Address etc
 from cybox.objects.address_object import Address
 
+
 VMIP = "146.231.133.174"
 
 class IOC_STIX(Report):
@@ -51,14 +54,58 @@ class IOC_STIX(Report):
 			fullHTTPArray = getFullHTTP(self.analysis_path)
 			udpconn = getUDPData(self.analysis_path)
 			dnspacket = getDNSData(self.analysis_path)
+			icmpPacket = getICMPData(self.analysis_path)
+			ftpconn = getFTPConn(self.analysis_path)
+			sshconn = getSSHConn(self.analysis_path)
 			if postDataArray != []  or getDomainsArray != [] or synConn != []:
-				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket)
+				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn)
 			else:
 				print "No IOCs to create"
 			
         	except (UnicodeError, TypeError, IOError) as e:
 			print "Error", e
             		raise CuckooReportError("Failed to make STIX IOCs :(")
+
+# SSH
+# source IP, source port, destination address, destination port
+# https://www.wireshark.org/docs/dfref/s/ssh.html
+def getSSHConn(folderPath):
+	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/SSHpackets.pcap -F pcap -Y ssh -T fields -e ip.src -e tcp.srcport -e ip.dst -e tcp.dstport -E separator=, > '+folderPath+'/SSHInfo.csv')
+	sshpacket = []
+	with open(folderPath+"/SSHInfo.csv", 'rb') as csvfile:
+		summaryCSVSSH = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSVSSH:
+			if row != [] and row not in sshpacket:
+				sshpacket.append(row)
+	print "sshpacket: ", sshpacket
+	return sshpacket
+
+# FTP
+# source IP, source port, destination address, destination port
+def getFTPConn(folderPath):
+	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/FTPpackets.pcap -F pcap -Y ftp.request==1 -T fields -e ip.src -e tcp.srcport -e ip.dst -e tcp.dstport -E separator=, > '+folderPath+'/FTPInfo.csv')
+	FTPpacket = []
+	with open(folderPath+"/FTPInfo.csv", 'rb') as csvfile:
+		summaryCSVFTP = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSVFTP:
+			if row != [] and row not in FTPpacket:
+				FTPpacket.append(row)
+	print "FTPpacket: ", FTPpacket
+	return FTPpacket
+
+# ICMP
+# source and destination address, type 
+def getICMPData(folderPath):
+	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/icmppackets.pcap -F pcap -Y icmp -T fields -e icmp.type -e ip.src -e ip.dst -E separator=, > '+folderPath+'/ICMPInfo.csv')
+	ICMPpacket = []
+	with open(folderPath+"/ICMPInfo.csv", 'rb') as csvfile:
+		summaryCSVICMP = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSVICMP:
+			if row != [] and row not in ICMPpacket:
+				ICMPpacket.append(row)
+	print "ICMPpacket: ", ICMPpacket
+	return ICMPpacket
+
 
 # source port, destination port, destination ip
 # https://www.wireshark.org/docs/dfref/u/udp.html
@@ -395,6 +442,86 @@ def DNSRequestObj(dnsinfo):
 	indicator.add_object(networkconnection)
 	return indicator
 
+# type, source address, destination address
+def ICMPObj(icmp):
+	# block types 0 (ping response), 8 (ping request)
+	nc = NetworkConnection()
+	nc.layer3_protocol = "ICMP"
+	if icmp[0] == 0: # incoming
+		ssocketaddress = SocketAddress()
+		ssocketaddress.ip_address = icmp[1]
+		nc.source_socket_address = ssocketaddress
+	elif icmp[0] ==  8: # outgoing
+		dsocketaddress = SocketAddress()
+		dsocketaddress.ip_address = icmp[2]
+		nc.destination_socket_address = dsocketaddress
+	indicator = Indicator()
+    	indicator.title = "ICMP connection"
+    	indicator.description = ("An indicator containing information about a ICMP connection")
+	indicator.set_produced_time(utils.dates.now())
+	indicator.add_object(nc)
+	return indicator
+
+# source IP, source port, destination address, destination port
+def FTPObj(ftp):
+	networkconnection = NetworkConnection()
+	networkconnection.layer3_protocol = "IPv4"
+	networkconnection.layer4_protocol = "TCP"
+	networkconnection.layer7_protocol = "FTP"
+	if ftp[0] != VMIP:
+		ssocketaddress = SocketAddress()
+		ssocketaddress.ip_address = ftp[0]
+		sport = Port()
+		sport.port_value = ftp[1]
+		sport.layer4_protocol = "TCP"
+		ssocketaddress.port = sport
+		networkconnection.source_socket_address = ssocketaddress
+	elif ftp[2] != VMIP:
+		dsocketaddress = SocketAddress()
+		dsocketaddress.ip_address = ftp[2]
+		dport = Port()
+		dport.port_value = ftp[3]
+		dport.layer4_protocol = "TCP"
+		ssocketaddress.port = dport
+		networkconnection.destination_socket_address = dsocketaddress
+	indicator = Indicator()
+    	indicator.title = "FTP Request"
+    	indicator.description = ("An indicator containing information about a FTP request")
+	indicator.set_produced_time(utils.dates.now())
+	indicator.add_object(networkconnection)
+	return indicator
+
+# source IP, source port, destination address, destination port
+def SSHObj(SSH):
+	networkconnection = NetworkConnection()
+	networkconnection.layer3_protocol = "IPv4"
+	networkconnection.layer4_protocol = "TCP"
+	networkconnection.layer7_protocol = "SSH"
+	if SSH[0] != VMIP:
+		ssocketaddress = SocketAddress()
+		ssocketaddress.ip_address = SSH[0]
+		sport = Port()
+		sport.port_value = SSH[1]
+		sport.layer4_protocol = "TCP"
+		ssocketaddress.port = sport
+		networkconnection.source_socket_address = ssocketaddress
+	elif SSH[2] != VMIP:
+		dsocketaddress = SocketAddress()
+		dsocketaddress.ip_address = SSH[2]
+		dport = Port()
+		dport.port_value = SSH[3]
+		dport.layer4_protocol = "TCP"
+		ssocketaddress.port = dport
+		networkconnection.destination_socket_address = dsocketaddress
+	indicator = Indicator()
+    	indicator.title = "SSH Request"
+    	indicator.description = ("An indicator containing information about a SSH request")
+	indicator.set_produced_time(utils.dates.now())
+	indicator.add_object(networkconnection)
+	return indicator
+
+def SMTP(smtpinfo):
+	pass
 
 def susIP(ip):
 	#TODO (from dns response) 
@@ -417,7 +544,7 @@ def translateType(typeNumber):
 	typeDict = {'1':'A', '2':'NS', '5':'CNAME', '15':'MX', '6':'SOA', '16':'TXT', '28':'AAAA'}
 	return typeDict[typeNumber]
 
-def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket):
+def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn):
 	#print "Gather IPs"
 	stix_package = STIXPackage()
 	stix_report = stixReport() 	# need to add indicator references to this
@@ -475,6 +602,24 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, resu
 		print "dns: ", dns		
 		stix_package.add(DNSRequestObj(dns))
 		stix_report.add_indicator(Indicator(idref=DNSRequestObj(dns)._id))
+
+# ICMP Connection
+	for icmp in icmpPacket:
+		print "ICMP: ", icmp
+		stix_package.add(ICMPObj(icmp))
+		stix_report.add_indicator(Indicator(idref=ICMPObj(icmp)._id))
+
+# FTP Connection
+	for ftp in ftpconn:
+		print "FTP: ", ftp
+		stix_package.add(FTPObj(ftp))
+		stix_report.add_indicator(Indicator(idref=FTPObj(ftp)._id))
+
+# SSH Connection
+	for ssh in sshconn:
+		print "SSH: ", ssh
+		stix_package.add(SSHObj(ssh))
+		stix_report.add_indicator(Indicator(idref=SSHObj(ssh)._id))
 
 	stix_package.add_report(stix_report)		
 	IOCStix = open(folderPath+"/"+str(results["virustotal"]["md5"])+".xml",'w')
