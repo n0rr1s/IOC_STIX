@@ -168,8 +168,6 @@ def getPostData(folderPath):
 	return postDataArray # array of http request URIs
 
 def getDomains(folderPath): # returns array or domain names
-	#folderNum = folderPath[len(folderPath)-2]
-	#print "get domains",folderPath
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y dns -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS.csv")
 	urlArray = []
 	# ...
@@ -198,7 +196,7 @@ def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN c
 def resolvedIPs(folderPath):
 	#folderNum = folderPath[len(folderPath)-2]
 	#print "resolvedIPs", folderPath
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS.csv")
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS-IPs.csv")
 	susResolvedIPArray = []
 	# ...
 	with open(folderPath+"/domains-SUS.csv", 'rb') as csvfile:
@@ -363,19 +361,19 @@ def UDPRequestObj(udpinfo):
 	ssocketaddress = SocketAddress()
 	if udpinfo[3] != VMIP:
 		ssocketaddress.ip_address = udpinfo[3]
-	sport = Port()
-	sport.port_value = udpinfo[0]
-	sport.layer4_protocol = "UDP"
-	ssocketaddress.port = sport
-	u.source_socket_address = ssocketaddress		
+		sport = Port()
+		sport.port_value = udpinfo[0]
+		sport.layer4_protocol = "UDP"
+		ssocketaddress.port = sport
+		u.source_socket_address = ssocketaddress		
 	dsocketaddress = SocketAddress()
 	if udpinfo[2] != VMIP:
 		dsocketaddress.ip_address = udpinfo[2]
-	dport = Port()
-	dport.port_value = udpinfo[1]
-	dport.layer4_protocol = "UDP"
-	dsocketaddress.port = dport
-	u.destination_socket_address = dsocketaddress
+		dport = Port()
+		dport.port_value = udpinfo[1]
+		dport.layer4_protocol = "UDP"
+		dsocketaddress.port = dport
+		u.destination_socket_address = dsocketaddress
 	indicator = Indicator()
     	indicator.title = "UDP connection"
     	indicator.description = ("An indicator containing information about a UDP connection")
@@ -447,11 +445,11 @@ def ICMPObj(icmp):
 	# block types 0 (ping response), 8 (ping request)
 	nc = NetworkConnection()
 	nc.layer3_protocol = "ICMP"
-	if icmp[0] == 0: # incoming
+	if icmp[0] == 0: # incoming connection
 		ssocketaddress = SocketAddress()
 		ssocketaddress.ip_address = icmp[1]
 		nc.source_socket_address = ssocketaddress
-	elif icmp[0] ==  8: # outgoing
+	elif icmp[0] ==  8: # outgoing connection
 		dsocketaddress = SocketAddress()
 		dsocketaddress.ip_address = icmp[2]
 		nc.destination_socket_address = dsocketaddress
@@ -468,7 +466,7 @@ def FTPObj(ftp):
 	networkconnection.layer3_protocol = "IPv4"
 	networkconnection.layer4_protocol = "TCP"
 	networkconnection.layer7_protocol = "FTP"
-	if ftp[0] != VMIP:
+	if ftp[0] != VMIP: # incoming connection
 		ssocketaddress = SocketAddress()
 		ssocketaddress.ip_address = ftp[0]
 		sport = Port()
@@ -476,7 +474,7 @@ def FTPObj(ftp):
 		sport.layer4_protocol = "TCP"
 		ssocketaddress.port = sport
 		networkconnection.source_socket_address = ssocketaddress
-	elif ftp[2] != VMIP:
+	elif ftp[2] != VMIP: # outgoing connection
 		dsocketaddress = SocketAddress()
 		dsocketaddress.ip_address = ftp[2]
 		dport = Port()
@@ -497,7 +495,7 @@ def SSHObj(SSH):
 	networkconnection.layer3_protocol = "IPv4"
 	networkconnection.layer4_protocol = "TCP"
 	networkconnection.layer7_protocol = "SSH"
-	if SSH[0] != VMIP:
+	if SSH[0] != VMIP: # incoming connection
 		ssocketaddress = SocketAddress()
 		ssocketaddress.ip_address = SSH[0]
 		sport = Port()
@@ -505,7 +503,7 @@ def SSHObj(SSH):
 		sport.layer4_protocol = "TCP"
 		ssocketaddress.port = sport
 		networkconnection.source_socket_address = ssocketaddress
-	elif SSH[2] != VMIP:
+	elif SSH[2] != VMIP: # outgoing connection
 		dsocketaddress = SocketAddress()
 		dsocketaddress.ip_address = SSH[2]
 		dport = Port()
