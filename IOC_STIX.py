@@ -50,6 +50,8 @@ class IOC_STIX(Report):
 			postDataArray = getPostData(self.analysis_path)
 			getDomainsArray = getDomains(self.analysis_path)
 			synConn = getSYNInfo(self.analysis_path)
+			synackconn = getSYNACKInfo(self.analysis_path)
+			ackConn = getACKInfo(self.analysis_path)
 			resolvedIPsArray = resolvedIPs(self.analysis_path)
 			fullHTTPArray = getFullHTTP(self.analysis_path)
 			udpconn = getUDPData(self.analysis_path)
@@ -58,7 +60,7 @@ class IOC_STIX(Report):
 			ftpconn = getFTPConn(self.analysis_path)
 			sshconn = getSSHConn(self.analysis_path)
 			if postDataArray != []  or getDomainsArray != [] or synConn != []:
-				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn)
+				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, synackconn, ackConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn)
 			else:
 				print "No IOCs to create"
 			
@@ -70,27 +72,27 @@ class IOC_STIX(Report):
 # source IP, source port, destination address, destination port
 # https://www.wireshark.org/docs/dfref/s/ssh.html
 def getSSHConn(folderPath):
-	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/SSHpackets.pcap -F pcap -Y ssh -T fields -e ip.src -e tcp.srcport -e ip.dst -e tcp.dstport -E separator=, > '+folderPath+'/SSHInfo.csv')
+	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/SSHpackets.pcap -F pcap -Y ssh -T fields -e ip.src -e tcp.srcport -e ip.dst -e tcp.dstport -e tcp.flags.syn -e tcp.flags.ack -E separator=, > '+folderPath+'/SSHInfo.csv')
 	sshpacket = []
 	with open(folderPath+"/SSHInfo.csv", 'rb') as csvfile:
 		summaryCSVSSH = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSVSSH:
 			if row != [] and row not in sshpacket:
 				sshpacket.append(row)
-	print "sshpacket: ", sshpacket
+	#print "sshpacket: ", sshpacket
 	return sshpacket
 
 # FTP
 # source IP, source port, destination address, destination port
 def getFTPConn(folderPath):
-	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/FTPpackets.pcap -F pcap -Y ftp.request==1 -T fields -e ip.src -e tcp.srcport -e ip.dst -e tcp.dstport -E separator=, > '+folderPath+'/FTPInfo.csv')
+	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/FTPpackets.pcap -F pcap -Y ftp -T fields -e ip.src -e tcp.srcport -e ip.dst -e tcp.dstport -e ftp.response.code -e ftp.request.command -e ftp.request.arg -e ftp.response.arg -E separator=, > '+folderPath+'/FTPInfo.csv')
 	FTPpacket = []
 	with open(folderPath+"/FTPInfo.csv", 'rb') as csvfile:
 		summaryCSVFTP = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSVFTP:
 			if row != [] and row not in FTPpacket:
 				FTPpacket.append(row)
-	print "FTPpacket: ", FTPpacket
+	#print "FTPpacket: ", FTPpacket
 	return FTPpacket
 
 # ICMP
@@ -103,7 +105,7 @@ def getICMPData(folderPath):
 		for row in summaryCSVICMP:
 			if row != [] and row not in ICMPpacket:
 				ICMPpacket.append(row)
-	print "ICMPpacket: ", ICMPpacket
+	#print "ICMPpacket: ", ICMPpacket
 	return ICMPpacket
 
 
@@ -129,7 +131,7 @@ def getDNSData(folderPath):
 		for row in summaryCSVDNS:
 			if row != [] and row not in dnspacket:
 				dnspacket.append(row)
-	print "dns packet: ", dnspacket
+	#print "dns packet: ", dnspacket
 	return dnspacket
 
 
@@ -181,22 +183,44 @@ def getDomains(folderPath): # returns array or domain names
 def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN connection and the ports
 	#folderNum = folderPath[len(folderPath)-2]
 	#print "getSYNInfo",folderPath
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0' -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS.csv")
-	#os.system("tshark -r "+folderPath+"/TCPSYN.pcap -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn-SUS.csv")
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0 and tcp.flags.cwr==0 and tcp.flags.ecn==0 and tcp.flags.fin==0 and tcp.flags.ns==0 and tcp.flags.push==0 and tcp.flags.res==0 and tcp.flags.reset==0 and tcp.flags.urg==0' -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn.csv")
 	dstIPArray = []
 	# ...
-	with open(folderPath+"/SYNConn-SUS.csv", 'rb') as csvfile:
+	with open(folderPath+"/SYNConn.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
 			if (tuple(row) not in dstIPArray):
 				dstIPArray.append(tuple(row))
-	#print dstIPArray
+	print "SYN", dstIPArray
+	return dstIPArray
+
+def getSYNACKInfo(folderPath):
+	print 
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYNACK.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==1 and tcp.flags.cwr==0 and tcp.flags.ecn==0 and tcp.flags.fin==0 and tcp.flags.ns==0 and tcp.flags.push==0 and tcp.flags.res==0 and tcp.flags.reset==0 and tcp.flags.urg==0' -T fields -e ip.dst -e ip.src -e tcp.dstport -e tcp.srcport -E separator=, > "+folderPath+"/SYNACKConn.csv")	
+	dstIPArray = []
+	# ...
+	with open(folderPath+"/SYNACKConn.csv", 'rb') as csvfile:
+		summaryCSV = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSV:
+			if (tuple(row) not in dstIPArray):
+				dstIPArray.append(tuple(row))
+	print "SYN-ACK", dstIPArray
+	return dstIPArray
+
+def getACKInfo(folderPath):
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPACK.pcap -F pcap -Y 'tcp.flags.syn==0 and tcp.flags.ack==1 and tcp.flags.cwr==0 and tcp.flags.ecn==0 and tcp.flags.fin==0 and tcp.flags.ns==0 and tcp.flags.push==0 and tcp.flags.res==0 and tcp.flags.reset==0 and tcp.flags.urg==0' -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/ACKConn.csv")
+	dstIPArray = []
+	# ...
+	with open(folderPath+"/ACKConn.csv", 'rb') as csvfile:
+		summaryCSV = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSV:
+			if (tuple(row) not in dstIPArray):
+				dstIPArray.append(tuple(row))
+	print "ACK", dstIPArray
 	return dstIPArray
 
 def resolvedIPs(folderPath):
-	#folderNum = folderPath[len(folderPath)-2]
-	#print "resolvedIPs", folderPath
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS-IPs.csv")
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y dns.flags.response==1 -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS-IPs.csv")
 	susResolvedIPArray = []
 	# ...
 	with open(folderPath+"/domains-SUS.csv", 'rb') as csvfile:
@@ -230,15 +254,11 @@ def URIobj(httpR):
 	indicator.add_object(h)
 	return indicator
 
-def HTTPFullObj(http): 
-	#print "HTTP full object", http
-	# HTTP Request Line
+def HTTPFullObj(http):
 	httprequestline = HTTPRequestLine()
 	httprequestline.http_method = http[0]
 	httprequestline.value = http[1]
 	httprequestline.version = http[2]
-	#print "Host field"
-	# Host Field
 	hostfield = HostField()
 	h = URI()
 	h.value = str(http[3]) 
@@ -247,8 +267,6 @@ def HTTPFullObj(http):
 	port = Port()
 	port.port_value = http[4]
 	hostfield.port = port
-	#print "http request"
-	# HTTP Request Header Fields
 	httprequestheaderfields = HTTPRequestHeaderFields()
 	if http[5] != '':										
 		httprequestheaderfields.accept = http[5]
@@ -273,8 +291,7 @@ def HTTPFullObj(http):
 	if http[15] != '':						
 		httprequestheaderfields.host = hostfield
 	if http[16] != '':										
-		httprequestheaderfields.proxy_authorization = http[16]				
-	#print "httprequestheader"
+		httprequestheaderfields.proxy_authorization = http[16]
 	httprequestheader = HTTPRequestHeader()
 	httprequestheader.parsed_header = httprequestheaderfields
 
@@ -300,57 +317,61 @@ def HTTPFullObj(http):
 	indicator.add_object(httpsession)
 	return indicator
 
-
-def TCPSYNobj(ips,ports):
-	#print "heeererererere TCPSYNobj"
-	if len(ports) < 2:
-		t = NetworkConnection()
-		t.layer3_protocol = "IPv4"
-		t.layer4_protocol = "TCP"
+# source IP, source port, destination address, destination port
+def TCPConnectionAttemptFailedObj(tcpinfo):
+	networkconnection = NetworkConnection()
+	networkconnection.layer3_protocol = "IPv4"
+	networkconnection.layer4_protocol = "TCP"
+	if tcpinfo[0] != VMIP: # incoming connection
 		ssocketaddress = SocketAddress()
+		ssocketaddress.ip_address = tcpinfo[0]
 		sport = Port()
-		sport.port_value = ports[0][0] 
+		sport.port_value = tcpinfo[2]
 		sport.layer4_protocol = "TCP"
 		ssocketaddress.port = sport
-		t.source_socket_address = ssocketaddress		
+		networkconnection.source_socket_address = ssocketaddress
+	elif tcpinfo[1] != VMIP: # outgoing connection
 		dsocketaddress = SocketAddress()
-		dsocketaddress.ip_address = ips
+		dsocketaddress.ip_address = tcpinfo[1]
 		dport = Port()
-		dport.port_value = ports[0][1]
+		dport.port_value = tcpinfo[3]
 		dport.layer4_protocol = "TCP"
 		dsocketaddress.port = dport
-		t.destination_socket_address = dsocketaddress
-		indicator = Indicator()
-	    	indicator.title = "TCP SYN connection"
-	    	indicator.description = ("An indicator containing information about a TCP connection")
-		indicator.set_produced_time(utils.dates.now())
-		indicator.add_object(t)
-		return indicator
-	else:
-		#print "no here"
-		for i in ports:
-			t = NetworkConnection()
-			t.layer3_protocol = "IPv4"
-			t.layer4_protocol = "TCP"
-			ssocketaddress = SocketAddress()
-			sport = Port()
-			sport.port_value = i[0] 
-			sport.layer4_protocol = "TCP"
-			ssocketaddress.port = sport
-			t.source_socket_address = ssocketaddress
-			dsocketaddress = SocketAddress()
-			dsocketaddress.ip_address = ips
-			dport = Port()
-			dport.port_value = i[1]
-			dport.layer4_protocol = "TCP"
-			dsocketaddress.port = dport
-			t.destination_socket_address = dsocketaddress
-			indicator = Indicator()
-		    	indicator.title = "TCP SYN connection"
-		    	indicator.description = ("An indicator containing information about a TCP connection")
-			indicator.set_produced_time(utils.dates.now())
-			indicator.add_object(t)
-			return indicator
+		networkconnection.destination_socket_address = dsocketaddress
+	indicator = Indicator()
+    	indicator.title = "TCP Connection Fail"
+    	indicator.description = ("An indicator containing information about a failed TCP hand shake")
+	indicator.set_produced_time(utils.dates.now())
+	indicator.add_object(networkconnection)
+	return indicator
+
+# source IP, source port, destination address, destination port
+def TCPConnectionEstablishedObj(tcpinfo):
+	networkconnection = NetworkConnection()
+	networkconnection.layer3_protocol = "IPv4"
+	networkconnection.layer4_protocol = "TCP"
+	if tcpinfo[0] != VMIP: # incoming connection
+		ssocketaddress = SocketAddress()
+		ssocketaddress.ip_address = tcpinfo[0]
+		sport = Port()
+		sport.port_value = tcpinfo[2]
+		sport.layer4_protocol = "TCP"
+		ssocketaddress.port = sport
+		networkconnection.source_socket_address = ssocketaddress
+	elif tcpinfo[1] != VMIP: # outgoing connection
+		dsocketaddress = SocketAddress()
+		dsocketaddress.ip_address = tcpinfo[1]
+		dport = Port()
+		dport.port_value = tcpinfo[3]
+		dport.layer4_protocol = "TCP"
+		dsocketaddress.port = dport
+		networkconnection.destination_socket_address = dsocketaddress
+	indicator = Indicator()
+    	indicator.title = "TCP Connection Established"
+    	indicator.description = ("An indicator containing information about a successful TCP hand shake")
+	indicator.set_produced_time(utils.dates.now())
+	indicator.add_object(networkconnection)
+	return indicator
 
 # source port, destination port, destination ip, source ip
 def UDPRequestObj(udpinfo):
@@ -390,7 +411,6 @@ def DNSRequestObj(dnsinfo):
 	networkconnection.layer4_protocol = "UDP"
 	networkconnection.layer7_protocol = "DNS"
 	ssocketaddress = SocketAddress()
-	#ssocketaddress.ip_address = dnsinfo[0]
 	sport = Port()
 	sport.port_value = dnsinfo[1]
 	sport.layer4_protocol = "UDP"
@@ -405,35 +425,13 @@ def DNSRequestObj(dnsinfo):
 	networkconnection.destination_socket_address = dsocketaddress
 	layer7connections = Layer7Connections()
 	dqr = DNSQuery()
-	indicator = Indicator()
-#	if dnsinfo[9] == 0:
+	indicator = Indicator()  
 	dnsques = DNSQuestion()
 	dnsques.qname = dnsinfo[4]
 	dnsques.qtype = translateType(dnsinfo[5])
 	dqr.question = dnsques
 	indicator.title = "DNS Request"
-	indicator.description = ("An indicator containing information about a DNS Request")
-#	else: # is a response
-#		dqr = DNSQuery()					
-#		dnsrecord = DNSRecord()
-#		try:
-#			dnsrecord.domain_name = dnsinfo[5]
-#		except:
-#			pass
-#		try:
-#			dnsrecord.ttl = dnsinfo[6]
-#		except:
-#			pass
-#		try:
-#			dnsrecord.record_type = translateType(dnsinfo[7])
-#		except:
-#			pass
-#		dnsrecord.ip_address = dnsinfo[8]
-#		dqr.answer_resource_records = DNSResourceRecords(dnsrecord)
-#		indicator.title = "DNS Response"
- #   		indicator.description = ("An indicator containing information about a DNS Response")
-		#dqr.authority_resource_records = 
-		#dqr.additional_records = 	
+	indicator.description = ("An indicator containing information about a DNS Request")	
 	layer7connections.dns_query = dqr
 	networkconnection.layer7_connections = layer7connections    	
 	indicator.set_produced_time(utils.dates.now())
@@ -460,34 +458,170 @@ def ICMPObj(icmp):
 	indicator.add_object(nc)
 	return indicator
 
-# source IP, source port, destination address, destination port
+# source IP, source port, destination address, destination port, etc
+# https://en.wikipedia.org/wiki/List_of_FTP_commands
 def FTPObj(ftp):
 	networkconnection = NetworkConnection()
 	networkconnection.layer3_protocol = "IPv4"
 	networkconnection.layer4_protocol = "TCP"
 	networkconnection.layer7_protocol = "FTP"
-	if ftp[0] != VMIP: # incoming connection
-		ssocketaddress = SocketAddress()
-		ssocketaddress.ip_address = ftp[0]
-		sport = Port()
-		sport.port_value = ftp[1]
-		sport.layer4_protocol = "TCP"
-		ssocketaddress.port = sport
-		networkconnection.source_socket_address = ssocketaddress
-	elif ftp[2] != VMIP: # outgoing connection
-		dsocketaddress = SocketAddress()
-		dsocketaddress.ip_address = ftp[2]
-		dport = Port()
-		dport.port_value = ftp[3]
-		dport.layer4_protocol = "TCP"
-		ssocketaddress.port = dport
-		networkconnection.destination_socket_address = dsocketaddress
 	indicator = Indicator()
-    	indicator.title = "FTP Request"
-    	indicator.description = ("An indicator containing information about a FTP request")
-	indicator.set_produced_time(utils.dates.now())
-	indicator.add_object(networkconnection)
-	return indicator
+	if ftp[4] == '220':
+		if ftp[0] != VMIP: # incoming connection
+			ssocketaddress = SocketAddress()
+			ssocketaddress.ip_address = ftp[0]
+			sport = Port()
+			sport.port_value = ftp[1]
+			sport.layer4_protocol = "TCP"
+			ssocketaddress.port = sport
+			networkconnection.source_socket_address = ssocketaddress
+		elif ftp[2] != VMIP: # outgoing connection
+			dsocketaddress = SocketAddress()
+			dsocketaddress.ip_address = ftp[2]
+			dport = Port()
+			dport.port_value = ftp[3]
+			dport.layer4_protocol = "TCP"
+			dsocketaddress.port = dport
+			networkconnection.destination_socket_address = dsocketaddress
+		indicator.title = "FTP"
+    		indicator.description = ("Service ready for new user: "+ftp[7])
+		indicator.set_produced_time(utils.dates.now())
+		indicator.add_object(networkconnection)
+		return indicator
+	elif ftp[4] == '230':
+		if ftp[0] != VMIP: # incoming connection
+			ssocketaddress = SocketAddress()
+			ssocketaddress.ip_address = ftp[0]
+			sport = Port()
+			sport.port_value = ftp[1]
+			sport.layer4_protocol = "TCP"
+			ssocketaddress.port = sport
+			networkconnection.source_socket_address = ssocketaddress
+		elif ftp[2] != VMIP: # outgoing connection
+			dsocketaddress = SocketAddress()
+			dsocketaddress.ip_address = ftp[2]
+			dport = Port()
+			dport.port_value = ftp[3]
+			dport.layer4_protocol = "TCP"
+			dsocketaddress.port = dport
+			networkconnection.destination_socket_address = dsocketaddress
+		indicator.title = "FTP"
+    		indicator.description = ("User logged in")
+		indicator.set_produced_time(utils.dates.now())
+		indicator.add_object(networkconnection)
+		return indicator
+	elif ftp[4] == '250':
+		if ftp[0] != VMIP: # incoming connection
+			ssocketaddress = SocketAddress()
+			ssocketaddress.ip_address = ftp[0]
+			sport = Port()
+			sport.port_value = ftp[1]
+			sport.layer4_protocol = "TCP"
+			ssocketaddress.port = sport
+			networkconnection.source_socket_address = ssocketaddress
+		elif ftp[2] != VMIP: # outgoing connection
+			dsocketaddress = SocketAddress()
+			dsocketaddress.ip_address = ftp[2]
+			dport = Port()
+			dport.port_value = ftp[3]
+			dport.layer4_protocol = "TCP"
+			dsocketaddress.port = dport
+			networkconnection.destination_socket_address = dsocketaddress
+		indicator.title = "FTP"
+    		indicator.description = ("Requested file action okay, completed.")    
+		indicator.set_produced_time(utils.dates.now())
+		indicator.add_object(networkconnection)
+		return indicator
+	elif ftp[5] == "USER":
+		if ftp[0] != VMIP: # incoming connection
+			ssocketaddress = SocketAddress()
+			ssocketaddress.ip_address = ftp[0]
+			sport = Port()
+			sport.port_value = ftp[1]
+			sport.layer4_protocol = "TCP"
+			ssocketaddress.port = sport
+			networkconnection.source_socket_address = ssocketaddress
+		elif ftp[2] != VMIP: # outgoing connection
+			dsocketaddress = SocketAddress()
+			dsocketaddress.ip_address = ftp[2]
+			dport = Port()
+			dport.port_value = ftp[3]
+			dport.layer4_protocol = "TCP"
+			dsocketaddress.port = dport
+			networkconnection.destination_socket_address = dsocketaddress
+		indicator.title = "FTP"
+    		indicator.description = ("Requested username: "+ftp[6])    
+		indicator.set_produced_time(utils.dates.now())
+		indicator.add_object(networkconnection)
+		return indicator
+	elif ftp[5] == "PASS":
+		if ftp[0] != VMIP: # incoming connection
+			ssocketaddress = SocketAddress()
+			ssocketaddress.ip_address = ftp[0]
+			sport = Port()
+			sport.port_value = ftp[1]
+			sport.layer4_protocol = "TCP"
+			ssocketaddress.port = sport
+			networkconnection.source_socket_address = ssocketaddress
+		elif ftp[2] != VMIP: # outgoing connection
+			dsocketaddress = SocketAddress()
+			dsocketaddress.ip_address = ftp[2]
+			dport = Port()
+			dport.port_value = ftp[3]
+			dport.layer4_protocol = "TCP"
+			dsocketaddress.port = dport
+			networkconnection.destination_socket_address = dsocketaddress
+		indicator.title = "FTP"
+    		indicator.description = ("Requested Password: "+ftp[6])    
+		indicator.set_produced_time(utils.dates.now())
+		indicator.add_object(networkconnection)
+		return indicator
+	elif ftp[5] == "STOR":
+		if ftp[0] != VMIP: # incoming connection
+			ssocketaddress = SocketAddress()
+			ssocketaddress.ip_address = ftp[0]
+			sport = Port()
+			sport.port_value = ftp[1]
+			sport.layer4_protocol = "TCP"
+			ssocketaddress.port = sport
+			networkconnection.source_socket_address = ssocketaddress
+		elif ftp[2] != VMIP: # outgoing connection
+			dsocketaddress = SocketAddress()
+			dsocketaddress.ip_address = ftp[2]
+			dport = Port()
+			dport.port_value = ftp[3]
+			dport.layer4_protocol = "TCP"
+			dsocketaddress.port = dport
+			networkconnection.destination_socket_address = dsocketaddress
+		indicator.title = "FTP"
+    		indicator.description = ("Upload file to server: "+ftp[6])    
+		indicator.set_produced_time(utils.dates.now())
+		indicator.add_object(networkconnection)
+		return indicator
+	elif ftp[5]=="RETR":
+		if ftp[0] != VMIP: # incoming connection
+			ssocketaddress = SocketAddress()
+			ssocketaddress.ip_address = ftp[0]
+			sport = Port()
+			sport.port_value = ftp[1]
+			sport.layer4_protocol = "TCP"
+			ssocketaddress.port = sport
+			networkconnection.source_socket_address = ssocketaddress
+		elif ftp[2] != VMIP: # outgoing connection
+			dsocketaddress = SocketAddress()
+			dsocketaddress.ip_address = ftp[2]
+			dport = Port()
+			dport.port_value = ftp[3]
+			dport.layer4_protocol = "TCP"
+			dsocketaddress.port = dport
+			networkconnection.destination_socket_address = dsocketaddress
+		indicator.title = "FTP"
+    		indicator.description = ("Retrieve a copy of the file: "+ftp[6])    
+		indicator.set_produced_time(utils.dates.now())
+		indicator.add_object(networkconnection)
+		return indicator
+
+	
 
 # source IP, source port, destination address, destination port
 def SSHObj(SSH):
@@ -495,7 +629,7 @@ def SSHObj(SSH):
 	networkconnection.layer3_protocol = "IPv4"
 	networkconnection.layer4_protocol = "TCP"
 	networkconnection.layer7_protocol = "SSH"
-	if SSH[0] != VMIP: # incoming connection
+	if SSH[0] != VMIP and SSH[4]==1 and SSH[5]==0: # incoming connection
 		ssocketaddress = SocketAddress()
 		ssocketaddress.ip_address = SSH[0]
 		sport = Port()
@@ -503,13 +637,13 @@ def SSHObj(SSH):
 		sport.layer4_protocol = "TCP"
 		ssocketaddress.port = sport
 		networkconnection.source_socket_address = ssocketaddress
-	elif SSH[2] != VMIP: # outgoing connection
+	elif SSH[2] != VMIP and SSH[4]==1 and SSH[5]==0: # outgoing connection
 		dsocketaddress = SocketAddress()
 		dsocketaddress.ip_address = SSH[2]
 		dport = Port()
 		dport.port_value = SSH[3]
 		dport.layer4_protocol = "TCP"
-		ssocketaddress.port = dport
+		dsocketaddress.port = dport
 		networkconnection.destination_socket_address = dsocketaddress
 	indicator = Indicator()
     	indicator.title = "SSH Request"
@@ -542,7 +676,7 @@ def translateType(typeNumber):
 	typeDict = {'1':'A', '2':'NS', '5':'CNAME', '15':'MX', '6':'SOA', '16':'TXT', '28':'AAAA'}
 	return typeDict[typeNumber]
 
-def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn):
+def gatherIOCs(folderPath, postDataArray, getDomains, synConn, synackConn, ackConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn):
 	#print "Gather IPs"
 	stix_package = STIXPackage()
 	stix_report = stixReport() 	# need to add indicator references to this
@@ -554,27 +688,24 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, resu
 	stix_report.header.information_source = stix_header_information_source
 		
 	uris = []
-	tcpSYNips = []
-	tcpSYNports = {}
 
 # IP address
 	for susip in resolvedIPs:
 		stix_package.add(susIP(susip))
 		stix_report.add_indicator(Indicator(idref=susIP(susip)._id))
-	
-#TCP SYN
-	for info in synConn:
-		tcpSYNips.append(info[1])
-		if info[1] not in tcpSYNports.keys():
-			tcpSYNports[info[1]] = [(info[2],info[3])]
-		else:
-			if info[3] not in tcpSYNports[info[1]]:
-				tcpSYNports[info[1]].append((info[2],info[3]))
-	tcpSYNips = removeDuplicates(tcpSYNips)
-	for z in tcpSYNips:		
-		stix_package.add(TCPSYNobj(z,tcpSYNports[z]))
-		stix_report.add_indicator(Indicator(idref=TCPSYNobj(z,tcpSYNports[z])._id))
-	
+
+# TCP Connection attempt and Connection established
+	for tcp in synConn:
+		if tcp not in ackConn:
+			print "tcp: ", tcp		
+			stix_package.add(TCPConnectionAttemptFailedObj(tcp))
+			stix_report.add_indicator(Indicator(idref=TCPConnectionAttemptFailedObj(tcp)._id))
+
+	for tcpest in synConn:
+		if tcpest in synackConn and tcpest in ackConn:
+			print "tcpest: ", tcpest		
+			stix_package.add(TCPConnectionEstablishedObj(tcpest))
+			stix_report.add_indicator(Indicator(idref=TCPConnectionEstablishedObj(tcpest)._id))
 # URI			
 	for i in removeDuplicates(postDataArray):
 		stix_package.add(URIobj(i))
@@ -591,31 +722,37 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, resolvedIPs, resu
 
 # UDP Connection
 	for udp in udpconn:
-		#print "udp: ", udp		
-		stix_package.add(UDPRequestObj(udp))
-		stix_report.add_indicator(Indicator(idref=UDPRequestObj(udp)._id))
+		if udp[0]!='53' and udp[1]!='53': # ignore DNS UDP packets (they are logged else where)
+			print "udp: ", udp		
+			stix_package.add(UDPRequestObj(udp))
+			stix_report.add_indicator(Indicator(idref=UDPRequestObj(udp)._id))
 
 # DNS Connection
 	for dns in dnspacket:
-		print "dns: ", dns		
+		#print "dns: ", dns		
 		stix_package.add(DNSRequestObj(dns))
 		stix_report.add_indicator(Indicator(idref=DNSRequestObj(dns)._id))
 
 # ICMP Connection
 	for icmp in icmpPacket:
-		print "ICMP: ", icmp
+		#print "ICMP: ", icmp
 		stix_package.add(ICMPObj(icmp))
 		stix_report.add_indicator(Indicator(idref=ICMPObj(icmp)._id))
 
 # FTP Connection
 	for ftp in ftpconn:
 		print "FTP: ", ftp
-		stix_package.add(FTPObj(ftp))
-		stix_report.add_indicator(Indicator(idref=FTPObj(ftp)._id))
+		if ftp[4]=='220' or ftp[4]=='230' or ftp[4]=='250':			
+			stix_package.add(FTPObj(ftp))
+			stix_report.add_indicator(Indicator(idref=FTPObj(ftp)._id))
+		elif ftp[5]=="USER" or ftp[5]=="PASS" or ftp[5]=="STOR" or ftp[5]=="RETR":
+			stix_package.add(FTPObj(ftp))
+			stix_report.add_indicator(Indicator(idref=FTPObj(ftp)._id))
+			
 
 # SSH Connection
 	for ssh in sshconn:
-		print "SSH: ", ssh
+		#print "SSH: ", ssh
 		stix_package.add(SSHObj(ssh))
 		stix_report.add_indicator(Indicator(idref=SSHObj(ssh)._id))
 
