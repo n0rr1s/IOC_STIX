@@ -625,6 +625,7 @@ def FTPObj(ftp):
 
 # source IP, source port, destination address, destination port
 def SSHObj(SSH):
+	print SSH
 	networkconnection = NetworkConnection()
 	networkconnection.layer3_protocol = "IPv4"
 	networkconnection.layer4_protocol = "TCP"
