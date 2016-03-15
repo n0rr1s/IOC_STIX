@@ -41,14 +41,13 @@ from cybox.objects.address_object import Address
 VMIP = "146.231.133.174"
 
 class IOC_STIX(Report):
-	def run(self, results):	
-		#print str(results)	
+	def run(self, results):		
 		try:
 			print "Start of IOC_STIX new one"
            		#Do things
 			pcapFile = dpkt.pcap.Reader(file(self.analysis_path+"/cut-byprocessingmodule.pcap"))
-			postDataArray = getPostData(self.analysis_path)
-			getDomainsArray = getDomains(self.analysis_path)
+			#postDataArray = getPostData(self.analysis_path)
+			#getDomainsArray = getDomains(self.analysis_path)
 			synConn = getSYNInfo(self.analysis_path)
 			synackconn = getSYNACKInfo(self.analysis_path)
 			ackConn = getACKInfo(self.analysis_path)
@@ -59,8 +58,8 @@ class IOC_STIX(Report):
 			icmpPacket = getICMPData(self.analysis_path)
 			ftpconn = getFTPConn(self.analysis_path)
 			sshconn = getSSHConn(self.analysis_path)
-			if postDataArray != []  or getDomainsArray != [] or synConn != []:
-				gatherIOCs(self.analysis_path, postDataArray, getDomainsArray, synConn, synackconn, ackConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn)
+			if synConn!=[] or synackconn!=[] or ackConn!=[] or resolvedIPsArray!=[] or results!=[] or fullHTTPArray!=[] or udpconn!=[] or dnspacket!=[] or icmpPacket!=[] or ftpconn!=[] or sshconn!=[]:
+				gatherIOCs(self.analysis_path, synConn, synackconn, ackConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn)
 			else:
 				print "No IOCs to create"
 			
@@ -79,7 +78,6 @@ def getSSHConn(folderPath):
 		for row in summaryCSVSSH:
 			if row != [] and row not in sshpacket:
 				sshpacket.append(row)
-	#print "sshpacket: ", sshpacket
 	return sshpacket
 
 # FTP
@@ -92,7 +90,6 @@ def getFTPConn(folderPath):
 		for row in summaryCSVFTP:
 			if row != [] and row not in FTPpacket:
 				FTPpacket.append(row)
-	#print "FTPpacket: ", FTPpacket
 	return FTPpacket
 
 # ICMP
@@ -105,7 +102,6 @@ def getICMPData(folderPath):
 		for row in summaryCSVICMP:
 			if row != [] and row not in ICMPpacket:
 				ICMPpacket.append(row)
-	#print "ICMPpacket: ", ICMPpacket
 	return ICMPpacket
 
 
@@ -119,7 +115,6 @@ def getUDPData(folderPath):
 		for row in summaryCSVUDP:
 			if row != [] and row not in udppacket:
 				udppacket.append(row)
-	#print "udp packet: ", udppacket
 	return udppacket
 
 def getDNSData(folderPath):
@@ -131,16 +126,13 @@ def getDNSData(folderPath):
 		for row in summaryCSVDNS:
 			if row != [] and row not in dnspacket:
 				dnspacket.append(row)
-	#print "dns packet: ", dnspacket
 	return dnspacket
 
 
 def getFullHTTP(folderPath):
-	comm = 'tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/HTTPGETpackets.pcap -F pcap -Y http.request.method=="GET" -T fields -e http.request.method -e http.request.uri -e http.request.version -e http.host -e tcp.dstport -e http.accept -e http.accept_language -e http.accept_encoding -e http.authorization -e http.cache_control -e http.connection -e http.cookie -e http.content_length -e http.content_type -e http.date -e http.host -e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullGET.csv'
-	#print "Http comm: ", comm
+	comm = 'tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/HTTPGETpackets.pcap -F pcap -Y http.request.method=="GET" -T fields -e http.request.method -e http.request.uri -e http.request.version -e http.host -e tcp.dstport -e http.accept -e http.accept_language -e http.accept_encoding -e http.authorization -e http.cache_control -e http.connection -e http.cookie -e http.content_length -e http.content_type -e http.date -e http.host -e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullGET.csv'	
 	os.system(comm)
-	comm2 = 'tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/HTTPPOSTpackets.pcap -F pcap -Y http.request.method=="POST" -T fields -e http.request.method -e http.request.uri -e http.request.version -e http.host -e tcp.dstport -e http.accept -e http.accept_language -e http.accept_encoding -e http.authorization -e http.cache_control -e http.connection -e http.cookie -e http.content_length -e http.content_type -e http.date -e http.host -e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullPOST.csv'
-	#print "Http comm: ", comm2	
+	comm2 = 'tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/HTTPPOSTpackets.pcap -F pcap -Y http.request.method=="POST" -T fields -e http.request.method -e http.request.uri -e http.request.version -e http.host -e tcp.dstport -e http.accept -e http.accept_language -e http.accept_encoding -e http.authorization -e http.cache_control -e http.connection -e http.cookie -e http.content_length -e http.content_type -e http.date -e http.host -e http.proxy_authorization -E separator=, > '+folderPath+'/HTTPFullPOST.csv'		
 	os.system(comm2)
 	HTTPfull = []
 	with open(folderPath+"/HTTPFullGET.csv", 'rb') as csvfile:
@@ -155,34 +147,32 @@ def getFullHTTP(folderPath):
 				HTTPfull.append(row)
 	return HTTPfull
 
-def getPostData(folderPath):
-	#folderNum = folderPath[len(folderPath)-2] 	
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y http -T fields -e http.request.uri -E separator=, > "+folderPath+"/HTTPPOST-SUS.csv")
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y http -T fields -e http.request.full_uri -E separator=, > "+folderPath+"/HTTPPOST-SUS-FULLURI.csv")
-	postDataArray = []
-	# ...
-	with open(folderPath+"/HTTPPOST-SUS.csv", 'rb') as csvfile:
-		summaryCSV = csv.reader(csvfile, delimiter=',')
-		for row in summaryCSV:
-			if row != []:
-				#print "getPostData", row, type(row)
-				postDataArray.append(row[0])
-	return postDataArray # array of http request URIs
+#def getPostData(folderPath):
+#	#folderNum = folderPath[len(folderPath)-2] 	
+#	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y http -T fields -e http.request.uri -E separator=, > "+folderPath+"/HTTPPOST-SUS.csv")
+#	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y http -T fields -e http.request.full_uri -E separator=, > "+folderPath+"/HTTPPOST-SUS-FULLURI.csv")
+#	postDataArray = []
+#	# ...
+#	with open(folderPath+"/HTTPPOST-SUS.csv", 'rb') as csvfile:
+#		summaryCSV = csv.reader(csvfile, delimiter=',')
+#		for row in summaryCSV:
+#			if row != []:
+#				#print "getPostData", row, type(row)
+#				postDataArray.append(row[0])
+#	return postDataArray # array of http request URIs
 
-def getDomains(folderPath): # returns array or domain names
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y dns -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS.csv")
-	urlArray = []
-	# ...
-	with open(folderPath+"/domains-SUS.csv", 'rb') as csvfile:
-		summaryCSV = csv.reader(csvfile, delimiter=',')
-		for row in summaryCSV:
-			if row != [] and row not in urlArray:
-				urlArray.append(row[0])
-	return urlArray # array of domain names
+#def getDomains(folderPath): # returns array or domain names
+#	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y dns -T fields -e dns.qry.name -E separator=, > "+folderPath+"/domains-SUS.csv")
+#	urlArray = []
+#	# ...
+#	with open(folderPath+"/domains-SUS.csv", 'rb') as csvfile:
+#		summaryCSV = csv.reader(csvfile, delimiter=',')
+#		for row in summaryCSV:
+#			if row != [] and row not in urlArray:
+#				urlArray.append(row[0])
+#	return urlArray # array of domain names
 
-def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN connection and the ports
-	#folderNum = folderPath[len(folderPath)-2]
-	#print "getSYNInfo",folderPath
+def getSYNInfo(folderPath):
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0 and tcp.flags.cwr==0 and tcp.flags.ecn==0 and tcp.flags.fin==0 and tcp.flags.ns==0 and tcp.flags.push==0 and tcp.flags.res==0 and tcp.flags.reset==0 and tcp.flags.urg==0' -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn.csv")
 	dstIPArray = []
 	# ...
@@ -191,11 +181,10 @@ def getSYNInfo(folderPath): 	# writes to a file the pairs of IPs from each SYN c
 		for row in summaryCSV:
 			if (tuple(row) not in dstIPArray):
 				dstIPArray.append(tuple(row))
-	print "SYN", dstIPArray
+	#print "SYN", dstIPArray
 	return dstIPArray
 
-def getSYNACKInfo(folderPath):
-	print 
+def getSYNACKInfo(folderPath):	
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYNACK.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==1 and tcp.flags.cwr==0 and tcp.flags.ecn==0 and tcp.flags.fin==0 and tcp.flags.ns==0 and tcp.flags.push==0 and tcp.flags.res==0 and tcp.flags.reset==0 and tcp.flags.urg==0' -T fields -e ip.dst -e ip.src -e tcp.dstport -e tcp.srcport -E separator=, > "+folderPath+"/SYNACKConn.csv")	
 	dstIPArray = []
 	# ...
@@ -204,7 +193,7 @@ def getSYNACKInfo(folderPath):
 		for row in summaryCSV:
 			if (tuple(row) not in dstIPArray):
 				dstIPArray.append(tuple(row))
-	print "SYN-ACK", dstIPArray
+	#print "SYN-ACK", dstIPArray
 	return dstIPArray
 
 def getACKInfo(folderPath):
@@ -216,19 +205,18 @@ def getACKInfo(folderPath):
 		for row in summaryCSV:
 			if (tuple(row) not in dstIPArray):
 				dstIPArray.append(tuple(row))
-	print "ACK", dstIPArray
+	#print "ACK", dstIPArray
 	return dstIPArray
 
 def resolvedIPs(folderPath):
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y dns.flags.response==1 -T fields -e dns.a -E separator=, > "+folderPath+"/domains-SUS-IPs.csv")
 	susResolvedIPArray = []
-	# ...
-	with open(folderPath+"/domains-SUS.csv", 'rb') as csvfile:
+	with open(folderPath+"/domains-SUS-IPs.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
 			if row != []:
 				for i in row:				
-					#print type(i), i
+					print "IP: -> ", i
 					susResolvedIPArray.append(i)
 	return removeDuplicates(susResolvedIPArray)
 
@@ -244,15 +232,15 @@ def domainNameobj(domain):
 	indicator1.add_object(d)
 	return indicator1
 
-def URIobj(httpR):
-	h = URI()
-	h.value = str(httpR) 
-	indicator = Indicator()
-    	indicator.title = "URI"
-    	indicator.description = ("An indicator containing a suspicious URI")
-	indicator.set_produced_time(utils.dates.now())
-	indicator.add_object(h)
-	return indicator
+#def URIobj(httpR):
+#	h = URI()
+#	h.value = str(httpR) 
+#	indicator = Indicator()
+#   	indicator.title = "URI"
+#    	indicator.description = ("An indicator containing a suspicious URI")
+#	indicator.set_produced_time(utils.dates.now())
+#	indicator.add_object(h)
+#	return indicator
 
 def HTTPFullObj(http):
 	httprequestline = HTTPRequestLine()
@@ -261,8 +249,8 @@ def HTTPFullObj(http):
 	httprequestline.version = http[2]
 	hostfield = HostField()
 	h = URI()
-	h.value = str(http[3]) 
-	print "Host value: ", http[3]
+	h.value = str(http[15]) 
+	#print "Host value: ", http[3]
 	hostfield.domain_name = h
 	port = Port()
 	port.port_value = http[4]
@@ -443,17 +431,35 @@ def ICMPObj(icmp):
 	# block types 0 (ping response), 8 (ping request)
 	nc = NetworkConnection()
 	nc.layer3_protocol = "ICMP"
-	if icmp[0] == 0: # incoming connection
-		ssocketaddress = SocketAddress()
-		ssocketaddress.ip_address = icmp[1]
-		nc.source_socket_address = ssocketaddress
-	elif icmp[0] ==  8: # outgoing connection
-		dsocketaddress = SocketAddress()
-		dsocketaddress.ip_address = icmp[2]
-		nc.destination_socket_address = dsocketaddress
+	if icmp[0] == 0: # echo-reply
+		if icmp[1]!=VMIP: 	# incoming reply from a server VM pinged
+			ssocketaddress = SocketAddress()
+			ssocketaddress.ip_address = icmp[1]
+			nc.source_socket_address = ssocketaddress
+			indicator.title = "ICMP echo-reply"
+    			indicator.description = ("8")
+		else:			# outgoing reply to a server that pinged you
+			dsocketaddress = SocketAddress()
+			dsocketaddress.ip_address = icmp[2]
+			nc.destination_socket_address = dsocketaddress
+			indicator.title = "ICMP echo-reply"
+    			indicator.description = ("8")
+	elif icmp[0] ==  8: # echo-request
+		if icmp[1]!=VMIP: 	# incoming ping request from a server
+			ssocketaddress = SocketAddress()
+			ssocketaddress.ip_address = icmp[1]
+			nc.source_socket_address = ssocketaddress
+			indicator.title = "ICMP echo-request"
+    			indicator.description = ("0")
+		else:			# VM is sending a ping request
+			dsocketaddress = SocketAddress()
+			dsocketaddress.ip_address = icmp[2]
+			nc.destination_socket_address = dsocketaddress
+		    	indicator.title = "ICMP echo-request"
+    			indicator.description = ("0")
+			
 	indicator = Indicator()
-    	indicator.title = "ICMP connection"
-    	indicator.description = ("An indicator containing information about a ICMP connection")
+
 	indicator.set_produced_time(utils.dates.now())
 	indicator.add_object(nc)
 	return indicator
@@ -625,7 +631,6 @@ def FTPObj(ftp):
 
 # source IP, source port, destination address, destination port
 def SSHObj(SSH):
-	print SSH
 	networkconnection = NetworkConnection()
 	networkconnection.layer3_protocol = "IPv4"
 	networkconnection.layer4_protocol = "TCP"
@@ -676,8 +681,8 @@ def removeDuplicates(seq):
 def translateType(typeNumber):
 	typeDict = {'1':'A', '2':'NS', '5':'CNAME', '15':'MX', '6':'SOA', '16':'TXT', '28':'AAAA'}
 	return typeDict[typeNumber]
-
-def gatherIOCs(folderPath, postDataArray, getDomains, synConn, synackConn, ackConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn):
+		 
+def gatherIOCs(folderPath, synConn, synackConn, ackConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn):
 	#print "Gather IPs"
 	stix_package = STIXPackage()
 	stix_report = stixReport() 	# need to add indicator references to this
@@ -688,7 +693,7 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, synackConn, ackCo
 	stix_report.header.short_description = "A short description for the indicators oooooh!"
 	stix_report.header.information_source = stix_header_information_source
 		
-	uris = []
+
 
 # IP address
 	for susip in resolvedIPs:
@@ -698,22 +703,15 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, synackConn, ackCo
 # TCP Connection attempt and Connection established
 	for tcp in synConn:
 		if tcp not in ackConn:
-			print "tcp: ", tcp		
+			#print "tcp: ", tcp		
 			stix_package.add(TCPConnectionAttemptFailedObj(tcp))
 			stix_report.add_indicator(Indicator(idref=TCPConnectionAttemptFailedObj(tcp)._id))
 
 	for tcpest in synConn:
 		if tcpest in synackConn and tcpest in ackConn:
-			print "tcpest: ", tcpest		
+			#print "tcpest: ", tcpest		
 			stix_package.add(TCPConnectionEstablishedObj(tcpest))
 			stix_report.add_indicator(Indicator(idref=TCPConnectionEstablishedObj(tcpest)._id))
-# URI			
-	for i in removeDuplicates(postDataArray):
-		stix_package.add(URIobj(i))
-		stix_report.add_indicator(Indicator(idref=URIobj(i)._id))
-	for dd in removeDuplicates(getDomains):
-		stix_package.add(domainNameobj(dd))
-		stix_report.add_indicator(Indicator(idref=domainNameobj(dd)._id))
 
 # Full HTTP Request
 	for ht in fullHTTPArray:
@@ -724,7 +722,7 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, synackConn, ackCo
 # UDP Connection
 	for udp in udpconn:
 		if udp[0]!='53' and udp[1]!='53': # ignore DNS UDP packets (they are logged else where)
-			print "udp: ", udp		
+			#print "udp: ", udp		
 			stix_package.add(UDPRequestObj(udp))
 			stix_report.add_indicator(Indicator(idref=UDPRequestObj(udp)._id))
 
@@ -742,7 +740,7 @@ def gatherIOCs(folderPath, postDataArray, getDomains, synConn, synackConn, ackCo
 
 # FTP Connection
 	for ftp in ftpconn:
-		print "FTP: ", ftp
+		#print "FTP: ", ftp
 		if ftp[4]=='220' or ftp[4]=='230' or ftp[4]=='250':			
 			stix_package.add(FTPObj(ftp))
 			stix_report.add_indicator(Indicator(idref=FTPObj(ftp)._id))
