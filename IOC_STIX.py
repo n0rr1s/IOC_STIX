@@ -49,18 +49,19 @@ class IOC_STIX(Report):
 			pcapFile = dpkt.pcap.Reader(file(self.analysis_path+"/cut-byprocessingmodule.pcap"))
 			#postDataArray = getPostData(self.analysis_path)
 			#getDomainsArray = getDomains(self.analysis_path)
-			synConn = getSYNInfo(self.analysis_path)
-			synackconn = getSYNACKInfo(self.analysis_path)
-			ackConn = getACKInfo(self.analysis_path)
-			resolvedIPsArray = resolvedIPs(self.analysis_path)
+			goodIPs = getMicrosoftDomains(self.analysis_path)
+			synConn = getSYNInfo(self.analysis_path, goodIPs)
+			synackconn = getSYNACKInfo(self.analysis_path, goodIPs)
+			ackConn = getACKInfo(self.analysis_path, goodIPs)
+			resolvedIPsArray = resolvedIPs(self.analysis_path, goodIPs)
 			fullHTTPArray = getFullHTTP(self.analysis_path)
-			udpconn = getUDPData(self.analysis_path)
+			udpconn = getUDPData(self.analysis_path, goodIPs)
 			dnspacket = getDNSData(self.analysis_path)
 			icmpPacket = getICMPData(self.analysis_path)
 			ftpconn = getFTPConn(self.analysis_path)
 			sshconn = getSSHConn(self.analysis_path)
-			foundIPs = findStaticIPs(results["strings"])
-			if synConn!=[] or synackconn!=[] or ackConn!=[] or resolvedIPsArray!=[] or results!=[] or fullHTTPArray!=[] or udpconn!=[] or dnspacket!=[] or icmpPacket!=[] or ftpconn!=[] or sshconn!=[] or foundIPs!=[]:
+			foundIPs = findStaticIPs(results["strings"])			
+			if synConn!=[] or synackconn!=[] or ackConn!=[] or resolvedIPsArray!=[] or fullHTTPArray!=[] or udpconn!=[] or dnspacket!=[] or icmpPacket!=[] or ftpconn!=[] or sshconn!=[] or foundIPs!=[]:
 				gatherIOCs(self.analysis_path, synConn, synackconn, ackConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn, foundIPs)
 			else:
 				print "No IOCs to create"
@@ -74,7 +75,7 @@ def findStaticIPs(stringlist):
 	for i in stringlist:
 		if i != []:
 			if valid_ip(i):
-				arrayofIPs.append(i)
+				arrayofIPs.append(getIP(i))
 				print "Found: ", i
 	return arrayofIPs
 
@@ -84,11 +85,27 @@ def valid_ip(address):
 	#print "May be wrong, Found:      -------------------- >         ", address, regex	
 	if regex != []:
 		print "Found in IP", regex
-		True
+		return True
 	else:
-		False
+		return False
 
-    
+def getIP(string):
+	return re.findall(r'(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})$', string)
+
+def getMicrosoftDomains(folderPath):
+	os.system("tshark -r "+folderPath+"/dump.pcap -Y dns.flags.response==1 -T fields -e dns.qry.name -e dns.a -E separator=, > "+folderPath+"/microDomains-SUS-IPs.csv")
+	niceIPs = []
+	with open(folderPath+"/microDomains-SUS-IPs.csv", 'rb') as csvfile:
+		summaryCSV = csv.reader(csvfile, delimiter=',')
+		for row in summaryCSV:			
+			if row!=[]:
+				if row[0].endswith("microsoft.com") or row[0].endswith("windowsupdate.com") or row[0].endswith("trafficmanager.net") or row[0].endswith("msocsp.com") or row[0].endswith("gvt1.com") or row[0].endswith("verisign.com") or row[0].endswith("windows.com"): # to be extra sure no goo traffic gets through
+					#print "Row after", row
+					for ips in row:
+						if valid_ip(ips) and ips not in niceIPs:
+							niceIPs.append(ips)
+	print "Good IPs", niceIPs
+	return niceIPs    
 
 # SSH
 # source IP, source port, destination address, destination port
@@ -133,14 +150,14 @@ def getICMPData(folderPath):
 
 # source port, destination port, destination ip
 # https://www.wireshark.org/docs/dfref/u/udp.html
-def getUDPData(folderPath):
+def getUDPData(folderPath, goodIPs):
 	#print "getUDPData"
 	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/UDPpackets.pcap -F pcap -Y udp -T fields -e udp.srcport -e udp.dstport -e ip.dst -e ip.src -E separator=, > '+folderPath+'/UDPInfo.csv')
 	udppacket = []
 	with open(folderPath+"/UDPInfo.csv", 'rb') as csvfile:
 		summaryCSVUDP = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSVUDP:
-			if row != [] and row not in udppacket:
+			if row != [] and row not in udppacket and (row[2] not in goodIPs) and (row[3] not in goodIPs):
 				udppacket.append(row)
 	return udppacket
 
@@ -168,7 +185,7 @@ def getFullHTTP(folderPath):
 	with open(folderPath+"/HTTPFullGET.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter='~')
 		for row in summaryCSV:
-			if row != [] and not row[14].endswith("windowsupdate.com") :
+			if row != [] and not row[14].endswith("windowsupdate.com"):
 				HTTPfull.append(row)
 	with open(folderPath+"/HTTPFullPOST.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter='~')
@@ -178,45 +195,47 @@ def getFullHTTP(folderPath):
 	return HTTPfull
 
 
-def getSYNInfo(folderPath):
+def getSYNInfo(folderPath, goodIPs):
 	#print "getSYNInfo"
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYN.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==0 and tcp.flags.cwr==0 and tcp.flags.ecn==0 and tcp.flags.fin==0 and tcp.flags.ns==0 and tcp.flags.push==0 and tcp.flags.res==0 and tcp.flags.reset==0 and tcp.flags.urg==0' -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/SYNConn.csv")
 	dstIPArray = []
 	with open(folderPath+"/SYNConn.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
-			if (tuple(row) not in dstIPArray):
+			print row
+			if (tuple(row) not in dstIPArray) and row[0] not in goodIPs and row[1] not in goodIPs:
 				dstIPArray.append(tuple(row))
 	#print "SYN", dstIPArray
 	return dstIPArray
 
-def getSYNACKInfo(folderPath):	
+def getSYNACKInfo(folderPath, goodIPs):	
 	#print "getSYNACKInfo"
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPSYNACK.pcap -F pcap -Y 'tcp.flags.syn==1 and tcp.flags.ack==1 and tcp.flags.cwr==0 and tcp.flags.ecn==0 and tcp.flags.fin==0 and tcp.flags.ns==0 and tcp.flags.push==0 and tcp.flags.res==0 and tcp.flags.reset==0 and tcp.flags.urg==0' -T fields -e ip.dst -e ip.src -e tcp.dstport -e tcp.srcport -E separator=, > "+folderPath+"/SYNACKConn.csv")	
 	dstIPArray = []
 	with open(folderPath+"/SYNACKConn.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
-			if (tuple(row) not in dstIPArray):
+			if (tuple(row) not in dstIPArray) and row[0] not in goodIPs and row[1] not in goodIPs:
 				dstIPArray.append(tuple(row))
 	#print "SYN-ACK", dstIPArray
 	return dstIPArray
 
-def getACKInfo(folderPath):
+def getACKInfo(folderPath, goodIPs):
 	#print "getACKInfo"
 	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -w "+folderPath+"/TCPACK.pcap -F pcap -Y 'tcp.flags.syn==0 and tcp.flags.ack==1 and tcp.flags.cwr==0 and tcp.flags.ecn==0 and tcp.flags.fin==0 and tcp.flags.ns==0 and tcp.flags.push==0 and tcp.flags.res==0 and tcp.flags.reset==0 and tcp.flags.urg==0' -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -E separator=, > "+folderPath+"/ACKConn.csv")
 	dstIPArray = []
 	with open(folderPath+"/ACKConn.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:
-			if (tuple(row) not in dstIPArray):
+			if (tuple(row) not in dstIPArray) and row[0] not in goodIPs and row[1] not in goodIPs:
 				dstIPArray.append(tuple(row))
 	#print "ACK", dstIPArray
 	return dstIPArray
 
-def resolvedIPs(folderPath):
+def resolvedIPs(folderPath, goodIPs):
 	#print "resolvedIPs"
-	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y dns.flags.response==1 -T fields -e dns.qry.name dns.a -E separator=, > "+folderPath+"/domains-SUS-IPs.csv")
+	
+	os.system("tshark -r "+folderPath+"/cut-byprocessingmodule.pcap -Y dns.flags.response==1 -T fields -e dns.qry.name -e dns.a -E separator=, > "+folderPath+"/domains-SUS-IPs.csv")
 	susResolvedIPArray = []
 	with open(folderPath+"/domains-SUS-IPs.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter=',')
@@ -224,8 +243,8 @@ def resolvedIPs(folderPath):
 			if row != []:
 				if not row[0].endswith("microsoft.com") and not row[0].endswith("windowsupdate.com"):
 					for i in row:
-						print "i", i
-						if valid_ip(i):				
+						print "Resolved IPs", i
+						if valid_ip(i) and i not in goodIPs:				
 							#print "IP: -> ", i
 							susResolvedIPArray.append(i)
 	return removeDuplicates(susResolvedIPArray)
@@ -797,7 +816,7 @@ def gatherIOCs(folderPath, synConn, synackConn, ackConn, resolvedIPs, results, f
 		stix_report.add_indicator(Indicator(idref=SSHObj(ssh)._id))
 
 	stix_package.add_report(stix_report)
-	print results["target"]		
+	#print results["target"]		
 	IOCStix = open(folderPath+"/"+str(results["target"]["file"]["name"])+".xml",'w')
 	IOCStix.write(stix_package.to_xml())
 	IOCStix.close()	
