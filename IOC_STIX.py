@@ -43,12 +43,8 @@ VMIP = "146.231.133.174"
 class IOC_STIX(Report):
 	def run(self, results):		
 		try:
-			#print results
-			print "Start of IOC_STIX new one"
-           		#Do things
+			print "Start of IOC_STIX reporting module"
 			pcapFile = dpkt.pcap.Reader(file(self.analysis_path+"/cut-byprocessingmodule.pcap"))
-			#postDataArray = getPostData(self.analysis_path)
-			#getDomainsArray = getDomains(self.analysis_path)
 			goodIPs = getMicrosoftDomains(self.analysis_path)
 			synConn = getSYNInfo(self.analysis_path, goodIPs)
 			synackconn = getSYNACKInfo(self.analysis_path, goodIPs)
@@ -69,6 +65,9 @@ class IOC_STIX(Report):
         	except (UnicodeError, TypeError, IOError) as e:
 			print "Error", e
             		raise CuckooReportError("Failed to make STIX IOCs :(")
+		return True
+
+
 
 def findStaticIPs(stringlist):
 	arrayofIPs = []
@@ -84,7 +83,7 @@ def valid_ip(address):
 	regex = re.findall(r'(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})$', address)
 	#print "May be wrong, Found:      -------------------- >         ", address, regex	
 	if regex != []:
-		print "Found in IP", regex
+		#print "Found in IP", regex
 		return True
 	else:
 		return False
@@ -104,7 +103,7 @@ def getMicrosoftDomains(folderPath):
 					for ips in row:
 						if valid_ip(ips) and ips not in niceIPs:
 							niceIPs.append(ips)
-	print "Good IPs", niceIPs
+	#print "Good IPs", niceIPs
 	return niceIPs    
 
 # SSH
@@ -243,7 +242,7 @@ def resolvedIPs(folderPath, goodIPs):
 			if row != []:
 				if not row[0].endswith("microsoft.com") and not row[0].endswith("windowsupdate.com"):
 					for i in row:
-						print "Resolved IPs", i
+						#print "Resolved IPs", i
 						if valid_ip(i) and i not in goodIPs:				
 							#print "IP: -> ", i
 							susResolvedIPArray.append(i)
