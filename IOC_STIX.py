@@ -43,7 +43,7 @@ VMIP = "146.231.133.174"
 class IOC_STIX(Report):
 	def run(self, results):		
 		try:
-			print "Start of IOC_STIX reporting module"
+			#print "Start of IOC_STIX reporting module\n"+results
 			pcapFile = dpkt.pcap.Reader(file(self.analysis_path+"/cut-byprocessingmodule.pcap"))
 			goodIPs = getMicrosoftDomains(self.analysis_path)
 			synConn = getSYNInfo(self.analysis_path, goodIPs)
@@ -56,9 +56,9 @@ class IOC_STIX(Report):
 			icmpPacket = getICMPData(self.analysis_path)
 			ftpconn = getFTPConn(self.analysis_path)
 			sshconn = getSSHConn(self.analysis_path)
-			foundIPs = findStaticIPs(results["strings"])			
-			if synConn!=[] or synackconn!=[] or ackConn!=[] or resolvedIPsArray!=[] or fullHTTPArray!=[] or udpconn!=[] or dnspacket!=[] or icmpPacket!=[] or ftpconn!=[] or sshconn!=[] or foundIPs!=[]:
-				gatherIOCs(self.analysis_path, synConn, synackconn, ackConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn, foundIPs)
+			#foundIPs = findStaticIPs(results["strings"])			
+			if synConn!=[] or synackconn!=[] or ackConn!=[] or resolvedIPsArray!=[] or fullHTTPArray!=[] or udpconn!=[] or dnspacket!=[] or icmpPacket!=[] or ftpconn!=[] or sshconn!=[]:# or foundIPs!=[]:
+				gatherIOCs(self.analysis_path, synConn, synackconn, ackConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn) #, foundIPs)
 			else:
 				print "No IOCs to create"
 			
@@ -734,7 +734,7 @@ def translateType(typeNumber):
 	typeDict = {'1':'A', '2':'NS', '5':'CNAME', '15':'MX', '6':'SOA', '16':'TXT', '28':'AAAA'}
 	return typeDict[typeNumber]
 		 
-def gatherIOCs(folderPath, synConn, synackConn, ackConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn, foundIPs):
+def gatherIOCs(folderPath, synConn, synackConn, ackConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn):#, foundIPs):
 	#print "Gather IOCs"
 	stix_package = STIXPackage()
 	stix_report = stixReport() 	# need to add indicator references to this
@@ -753,9 +753,9 @@ def gatherIOCs(folderPath, synConn, synackConn, ackConn, resolvedIPs, results, f
 		stix_report.add_indicator(Indicator(idref=susIP(susip)._id))
 	
 # IPs found as static strings in the file	
-	for IP in foundIPs:
-		stix_package.add(susIPfound(IP))
-		stix_report.add_indicator(Indicator(idref=susIPfound(IP)._id))
+#	for IP in foundIPs:
+#		stix_package.add(susIPfound(IP))
+#		stix_report.add_indicator(Indicator(idref=susIPfound(IP)._id))
 
 # TCP Connection attempt and Connection established
 	for tcp in synConn:
