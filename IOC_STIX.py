@@ -44,7 +44,7 @@ class IOC_STIX(Report):
 	def run(self, results):		
 		try:
 			#print "Start of IOC_STIX reporting module\n"+results
-			pcapFile = dpkt.pcap.Reader(file(self.analysis_path+"/cut-byprocessingmodule.pcap"))
+			#pcapFile = dpkt.pcap.Reader(file(self.analysis_path+"/cut-byprocessingmodule.pcap"))
 			goodIPs = getMicrosoftDomains(self.analysis_path)
 			synConn = getSYNInfo(self.analysis_path, goodIPs)
 			synackconn = getSYNACKInfo(self.analysis_path, goodIPs)
@@ -56,9 +56,9 @@ class IOC_STIX(Report):
 			icmpPacket = getICMPData(self.analysis_path)
 			ftpconn = getFTPConn(self.analysis_path)
 			sshconn = getSSHConn(self.analysis_path)
-			#foundIPs = findStaticIPs(results["strings"])			
-			if synConn!=[] or synackconn!=[] or ackConn!=[] or resolvedIPsArray!=[] or fullHTTPArray!=[] or udpconn!=[] or dnspacket!=[] or icmpPacket!=[] or ftpconn!=[] or sshconn!=[]:# or foundIPs!=[]:
-				gatherIOCs(self.analysis_path, synConn, synackconn, ackConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn) #, foundIPs)
+			foundIPs = findStaticIPs(results["strings"])			
+			if synConn!=[] or synackconn!=[] or ackConn!=[] or resolvedIPsArray!=[] or fullHTTPArray!=[] or udpconn!=[] or dnspacket!=[] or icmpPacket!=[] or ftpconn!=[] or sshconn!=[] or foundIPs!=[]:
+				gatherIOCs(self.analysis_path, synConn, synackconn, ackConn, resolvedIPsArray, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn, foundIPs)
 			else:
 				print "No IOCs to create"
 			
@@ -74,22 +74,30 @@ def findStaticIPs(stringlist):
 	for i in stringlist:
 		if i != []:
 			if valid_ip(i):
-				arrayofIPs.append(getIP(i))
-				print "Found: ", i
+				try:
+					#print "Before socket: ", i
+					socket.inet_aton(getIP(i))
+					arrayofIPs.append(getIP(i))
+					print "Found static: ", i
+				except:
+					print "Not a static IP", i
 	return arrayofIPs
 
 
 def valid_ip(address):
-	regex = re.findall(r'(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})$', address)
+	regex = re.findall(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b", address)
+	# https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9780596802837/ch07s16.html
 	#print "May be wrong, Found:      -------------------- >         ", address, regex	
+	#print "Regex", regex
 	if regex != []:
 		#print "Found in IP", regex
 		return True
 	else:
+		#print "Not IP", regex
 		return False
 
 def getIP(string):
-	return re.findall(r'(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})$', string)
+	return re.findall(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', string)[0]
 
 def getMicrosoftDomains(folderPath):
 	os.system("tshark -r "+folderPath+"/dump.pcap -Y dns.flags.response==1 -T fields -e dns.qry.name -e dns.a -E separator=, > "+folderPath+"/microDomains-SUS-IPs.csv")
@@ -98,7 +106,7 @@ def getMicrosoftDomains(folderPath):
 		summaryCSV = csv.reader(csvfile, delimiter=',')
 		for row in summaryCSV:			
 			if row!=[]:
-				if row[0].endswith("microsoft.com") or row[0].endswith("windowsupdate.com") or row[0].endswith("trafficmanager.net") or row[0].endswith("msocsp.com") or row[0].endswith("gvt1.com") or row[0].endswith("verisign.com") or row[0].endswith("windows.com"): # to be extra sure no goo traffic gets through
+				if row[0].endswith("microsoft.com") or row[0].endswith("windowsupdate.com") or row[0].endswith("trafficmanager.net") or row[0].endswith("msocsp.com") or row[0].endswith("gvt1.com") or row[0].endswith("verisign.com") or row[0].endswith("windows.com") or row[0].endswith("google.com"): # to be extra sure no good traffic gets through
 					#print "Row after", row
 					for ips in row:
 						if valid_ip(ips) and ips not in niceIPs:
@@ -169,7 +177,7 @@ def getDNSData(folderPath):
 		summaryCSVDNS = csv.reader(csvfile, delimiter='~')
 		for row in summaryCSVDNS:
 			print 'row[4].endswith("microsoft.com")', row[4].endswith("microsoft.com"), row[4]
-			if row != [] and row not in dnspacket and not row[4].endswith("microsoft.com") and not row[4].endswith("windowsupdate.com"):
+			if row != [] and row not in dnspacket and not row[4].endswith("microsoft.com") and not row[4].endswith("windowsupdate.com") and not row[4].endswith("gvt1.com") and not row[4].endswith("google.com"):
 				dnspacket.append(row)
 	return dnspacket
 
@@ -184,7 +192,7 @@ def getFullHTTP(folderPath):
 	with open(folderPath+"/HTTPFullGET.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter='~')
 		for row in summaryCSV:
-			if row != [] and not row[14].endswith("windowsupdate.com"):
+			if row != [] and row not in dnspacket and not row[14].endswith("microsoft.com") and not row[14].endswith("windowsupdate.com") and not row[14].endswith("gvt1.com") and not row[14].endswith("google.com"):
 				HTTPfull.append(row)
 	with open(folderPath+"/HTTPFullPOST.csv", 'rb') as csvfile:
 		summaryCSV = csv.reader(csvfile, delimiter='~')
@@ -311,13 +319,9 @@ def HTTPFullObj(http):
 		httprequestheaderfields.proxy_authorization = http[15]
 	httprequestheader = HTTPRequestHeader()
 	httprequestheader.parsed_header = httprequestheaderfields
-	#httpmessage = HTTPMessage()
-	#httpmessage.length = len(http.body)
-	#httpmessage.message_body = http.body
 	httpclientrequest = HTTPClientRequest()
 	httpclientrequest.http_request_line = httprequestline
 	httpclientrequest.http_request_header = httprequestheader
-	#httpclientrequest.http_message_body = httpmessage
 	
 	http_request_response = HTTPRequestResponse()
 	http_request_response.http_client_request = httpclientrequest
@@ -325,11 +329,18 @@ def HTTPFullObj(http):
 	httpsession = HTTPSession()	
 	httpsession.http_request_response = http_request_response	
 	#print "Still in http obj, almost done"
+	layer7connections = Layer7Connections()
+	layer7connections.http_session = httpsession
+	networkconnection = NetworkConnection()
+	networkconnection.layer3_protocol = "IPv4"
+	networkconnection.layer4_protocol = "TCP"
+	networkconnection.layer7_protocol = "HTTP"
+	networkconnection.layer7_connections = layer7connections
 	indicator = Indicator()
     	indicator.title = "HTTP request"
     	indicator.description = ("An indicator containing information about a HTTP request")
 	indicator.set_produced_time(utils.dates.now())
-	indicator.add_object(httpsession)
+	indicator.add_object(networkconnection)
 	return indicator
 
 # source IP, source port, destination address, destination port
@@ -337,8 +348,9 @@ def TCPConnectionAttemptFailedObj(tcpinfo):
 	#print "TCPConnectionAttemptFailedObj"
 	networkconnection = NetworkConnection()
 	networkconnection.layer3_protocol = "IPv4"
-	networkconnection.layer4_protocol = "TCP"
+	networkconnection.layer4_protocol = "TCP"	
 	if tcpinfo[0] != VMIP: # incoming connection
+		networkconnection.destination_tcp_state = "SYN_SENT"
 		ssocketaddress = SocketAddress()
 		ssocketaddress.ip_address = tcpinfo[0]
 		sport = Port()
@@ -347,6 +359,7 @@ def TCPConnectionAttemptFailedObj(tcpinfo):
 		ssocketaddress.port = sport
 		networkconnection.source_socket_address = ssocketaddress
 	elif tcpinfo[1] != VMIP: # outgoing connection
+		networkconnection.source_tcp_state = "SYN_SENT"
 		dsocketaddress = SocketAddress()
 		dsocketaddress.ip_address = tcpinfo[1]
 		dport = Port()
@@ -368,6 +381,7 @@ def TCPConnectionEstablishedObj(tcpinfo):
 	networkconnection.layer3_protocol = "IPv4"
 	networkconnection.layer4_protocol = "TCP"
 	if tcpinfo[0] != VMIP: # incoming connection
+		networkconnection.destination_tcp_state = "ESTABLISHED"
 		ssocketaddress = SocketAddress()
 		ssocketaddress.ip_address = tcpinfo[0]
 		sport = Port()
@@ -376,6 +390,7 @@ def TCPConnectionEstablishedObj(tcpinfo):
 		ssocketaddress.port = sport
 		networkconnection.source_socket_address = ssocketaddress
 	elif tcpinfo[1] != VMIP: # outgoing connection
+		networkconnection.source_tcp_state = "ESTABLISHED"
 		dsocketaddress = SocketAddress()
 		dsocketaddress.ip_address = tcpinfo[1]
 		dport = Port()
@@ -470,26 +485,26 @@ def ICMPObj(icmp):
 			ssocketaddress.ip_address = icmp[1]
 			nc.source_socket_address = ssocketaddress			
 			indicator.title = "ICMP echo-reply"
-    			indicator.description = ("8")
+    			indicator.description = ("0")
 		else:			# outgoing reply to a server that pinged you
 			dsocketaddress = SocketAddress()
 			dsocketaddress.ip_address = icmp[2]
 			nc.destination_socket_address = dsocketaddress
 			indicator.title = "ICMP echo-reply"
-    			indicator.description = ("8")
+    			indicator.description = ("0")
 	elif icmp[0] ==  8: # echo-request
 		if icmp[1]!=VMIP: 	# incoming ping request from a server
 			ssocketaddress = SocketAddress()
 			ssocketaddress.ip_address = icmp[1]
 			nc.source_socket_address = ssocketaddress
 			indicator.title = "ICMP echo-request"
-    			indicator.description = ("0")
+    			indicator.description = ("8")
 		else:			# VM is sending a ping request
 			dsocketaddress = SocketAddress()
 			dsocketaddress.ip_address = icmp[2]
 			nc.destination_socket_address = dsocketaddress
 		    	indicator.title = "ICMP echo-request"
-    			indicator.description = ("0")
+    			indicator.description = ("8")
 	indicator.set_produced_time(utils.dates.now())
 	indicator.add_object(nc)
 	return indicator
@@ -734,7 +749,7 @@ def translateType(typeNumber):
 	typeDict = {'1':'A', '2':'NS', '5':'CNAME', '15':'MX', '6':'SOA', '16':'TXT', '28':'AAAA'}
 	return typeDict[typeNumber]
 		 
-def gatherIOCs(folderPath, synConn, synackConn, ackConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn):#, foundIPs):
+def gatherIOCs(folderPath, synConn, synackConn, ackConn, resolvedIPs, results, fullHTTPArray, udpconn, dnspacket, icmpPacket, ftpconn, sshconn, foundIPs):
 	#print "Gather IOCs"
 	stix_package = STIXPackage()
 	stix_report = stixReport() 	# need to add indicator references to this
@@ -753,9 +768,9 @@ def gatherIOCs(folderPath, synConn, synackConn, ackConn, resolvedIPs, results, f
 		stix_report.add_indicator(Indicator(idref=susIP(susip)._id))
 	
 # IPs found as static strings in the file	
-#	for IP in foundIPs:
-#		stix_package.add(susIPfound(IP))
-#		stix_report.add_indicator(Indicator(idref=susIPfound(IP)._id))
+	for IP in foundIPs:
+		stix_package.add(susIPfound(IP))
+		stix_report.add_indicator(Indicator(idref=susIPfound(IP)._id))
 
 # TCP Connection attempt and Connection established
 	for tcp in synConn:
