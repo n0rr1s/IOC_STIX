@@ -1,3 +1,6 @@
+# This is a reporting module for the Cuckoo Sandbox.
+# It must be placed in the reporting module directory of the cuckoo installation and enabled.
+
 import os, csv, dpkt, datetime, socket, re
 
 from lib.cuckoo.common.abstracts import Report
@@ -37,8 +40,8 @@ from cybox.objects.port_object import Port
 # IP Address etc
 from cybox.objects.address_object import Address
 
-
-VMIP = "146.231.133.174"
+# change this to the IP of the virtual machine
+VMIP = "1.1.1.1"
 
 class IOC_STIX(Report):
 	def run(self, results):		
