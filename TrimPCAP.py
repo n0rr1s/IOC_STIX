@@ -1,5 +1,5 @@
-from lib.cuckoo.common.exceptions import CuckooProcessingError
-from lib.cuckoo.common.abstracts import Processing
+from cuckoo.common.exceptions import CuckooProcessingError
+from cuckoo.common.abstracts import Processing
 import os
 import subprocess32
 
