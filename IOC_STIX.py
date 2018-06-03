@@ -3,8 +3,8 @@
 
 import os, csv, dpkt, datetime, socket, re
 
-from lib.cuckoo.common.abstracts import Report
-from lib.cuckoo.common.exceptions import CuckooReportError
+from cuckoo.common.abstracts import Report
+from cuckoo.common.exceptions import CuckooReportError
 
 # python-stix
 import stix.utils as utils
