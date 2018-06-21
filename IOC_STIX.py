@@ -102,7 +102,7 @@ def getMicrosoftDomains(folderPath):
 # source IP, source port, destination address, destination port
 # https://www.wireshark.org/docs/dfref/s/ssh.html
 def getSSHConn(folderPath):
-	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/SSHpackets.pcap -F pcap -Y ssh -T fields -e ip.src -e tcp.srcport -e ip.dst -e tcp.dstport -e tcp.flags.syn -e tcp.flags.ack -e ssh.kexdh.host_key -E separator=, > '+folderPath+'/SSHInfo.csv')
+	os.system('tshark -r '+folderPath+'/cut-byprocessingmodule.pcap -w '+folderPath+'/SSHpackets.pcap -F pcap -Y ssh -T fields -e ip.src -e tcp.srcport -e ip.dst -e tcp.dstport -e tcp.flags.syn -e tcp.flags.ack -e ssh.host_key.data -E separator=, > '+folderPath+'/SSHInfo.csv')
 	sshpacket = []
 	with open(folderPath+"/SSHInfo.csv", 'rb') as csvfile:
 		summaryCSVSSH = csv.reader(csvfile, delimiter=',')
