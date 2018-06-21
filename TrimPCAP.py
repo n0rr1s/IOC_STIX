@@ -3,7 +3,7 @@ from cuckoo.common.abstracts import Processing
 import os
 import subprocess32
 
-class PCAPfilter(Processing):
+class TrimPCAP(Processing):
 
     def run(self):
         self.key = "key"
@@ -13,8 +13,9 @@ class PCAPfilter(Processing):
 	try:
 		print "About to cut PCAP"
 		filterString = "meep"
-		subprocess32.call([self.analysis_path+"/../../../filterString.sh", self.pcap_path, self.analysis_path+'/cut-byprocessingmodule.pcap'])
+		subprocess32.call([self.analysis_path+"/../../../filter.sh", self.pcap_path, self.analysis_path+'/cut-byprocessingmodule.pcap'])
 		print "Done cutting"
-	except:
+	except Exception as e:
+		print e
 		raise CuckooProcessingError("Could not process PCAP")
         return filterString
