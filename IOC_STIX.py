@@ -33,7 +33,7 @@ from cybox.objects.port_object import Port
 from cybox.objects.address_object import Address
 
 # change this to the IP of the virtual machine
-VMIP = "192.168.0.106"
+VMIP = "X.X.X.X"
 
 class IOC_STIX(Report):
 	def run(self, results):
